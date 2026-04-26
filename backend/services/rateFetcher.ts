@@ -19,8 +19,8 @@ export async function fetchFiatRates(baseCurrency?: string): Promise<void> {
     const base = baseCurrency || settings.default_currency || "USD";
 
     // Get list of fiat currencies from DB (all except base)
-    const currencies = run("SELECT code FROM currencies WHERE type = 'fiat' AND code != ?", [base]);
-    const fiatCodes = (currencies as any[]).map(c => c.code).filter(Boolean);
+    const currencies = query("SELECT code FROM currencies WHERE type = 'fiat' AND code != ?", [base]) as any[];
+    const fiatCodes = currencies.map(c => c.code).filter(Boolean);
     
     if (fiatCodes.length === 0) return;
 
@@ -74,7 +74,7 @@ export async function fetchCryptoRates(baseCurrency?: string): Promise<void> {
     const base = baseCurrency || settings.default_currency || "USD";
 
     // Get list of crypto currencies from DB
-    const currencies = run("SELECT code FROM currencies WHERE type = 'crypto'") as any[];
+    const currencies = query("SELECT code FROM currencies WHERE type = 'crypto'") as any[];
     const cryptoCodes = currencies.map(c => c.code).filter(Boolean);
     
     if (cryptoCodes.length === 0) return;
