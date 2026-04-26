@@ -83,6 +83,7 @@ export const api = {
     return fetchJson(`/currencies${search}`);
   },
   getCurrency: (code: string) => fetchJson(`/currencies/${code}`),
+  createCurrency: (data: any) => fetchJson("/currencies", { method: "POST", body: JSON.stringify(data) }),
 
   // Settings
   getSettings: () => fetchJson("/settings"),
