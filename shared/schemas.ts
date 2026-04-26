@@ -40,6 +40,64 @@ export const insertCategorySchema = z.object({
 export type Category = z.infer<typeof categorySchema>;
 export type InsertCategory = z.infer<typeof insertCategorySchema>;
 
+// ─── Currency ─────────────────────────────────────────────────────────────────
+
+export const currencyTypeSchema = z.enum(["fiat", "crypto"]);
+
+export const currencySchema = z.object({
+  id: z.number().int(),
+  code: z.string().min(1).max(10),
+  name: z.string().min(1).max(50),
+  symbol: z.string().max(10).optional(),
+  precision: z.number().int().min(0).max(18).default(2),
+  type: currencyTypeSchema,
+  isActive: z.number().int().default(1),
+});
+
+export const insertCurrencySchema = z.object({
+  code: z.string().min(1).max(10),
+  name: z.string().min(1).max(50),
+  symbol: z.string().max(10).optional(),
+  precision: z.number().int().min(0).max(18).default(2),
+  type: currencyTypeSchema,
+});
+
+export type Currency = z.infer<typeof currencySchema>;
+export type InsertCurrency = z.infer<typeof insertCurrencySchema>;
+
+// ─── Settings ───────────────────────────────────────────────────────────────────
+
+export const settingsSchema = z.object({
+  id: z.number().int().optional(),
+  userId: z.number().int().nullable().optional(),
+  defaultCurrency: z.string().min(1).max(10).default("USD"),
+  fiatFetchInterval: z.number().int().min(1).max(1440).default(60),
+  cryptoFetchInterval: z.number().int().min(1).max(1440).default(5),
+  autoFetchRates: z.number().int().default(1),
+  showCryptoOnDashboard: z.number().int().default(1),
+});
+
+export const updateSettingsSchema = settingsSchema.partial().refine(
+  (data) => Object.keys(data).length > 0,
+  { message: "At least one field must be provided" },
+);
+
+export type Settings = z.infer<typeof settingsSchema>;
+export type UpdateSettings = z.infer<typeof updateSettingsSchema>;
+
+// ─── Exchange Rate ──────────────────────────────────────────────────────────────
+
+export const exchangeRateSchema = z.object({
+  id: z.number().int().optional(),
+  baseCurrency: z.string().min(1).max(10),
+  targetCurrency: z.string().min(1).max(10),
+  rate: z.number().positive(),
+  updatedAt: z.string().datetime().optional(),
+  source: z.enum(["frankfurter", "coingecko"]),
+});
+
+export type ExchangeRate = z.infer<typeof exchangeRateSchema>;
+
 // ─── Transaction ──────────────────────────────────────────────────────────────
 
 export const transactionTypeSchema = z.enum(["income", "expense"]);
@@ -47,6 +105,9 @@ export const transactionTypeSchema = z.enum(["income", "expense"]);
 export const transactionSchema = z.object({
   id: z.number().int(),
   amount: z.number().positive(),
+  currency: z.string().min(1).max(10).default("USD"),
+  amountDefault: z.number().positive(),
+  exchangeRate: z.number().positive().optional(),
   description: z.string().max(255).optional(),
   date: z.string().datetime(),
   type: transactionTypeSchema,
@@ -56,6 +117,9 @@ export const transactionSchema = z.object({
 
 export const insertTransactionSchema = z.object({
   amount: z.number().positive(),
+  currency: z.string().min(1).max(10).default("USD"),
+  amountDefault: z.number().positive(),
+  exchangeRate: z.number().positive().optional(),
   description: z.string().max(255).optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // YYYY-MM-DD
   type: transactionTypeSchema,

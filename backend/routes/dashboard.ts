@@ -47,16 +47,16 @@ dashboard.get("/", async (c) => {
   const yearTx = query("SELECT * FROM transactions WHERE date >= ?", [yearStart]);
 
   // Current balance
-  const totalIncome = allTx.filter((t: any) => t.type === "income").reduce((sum: number, t: any) => sum + t.amount, 0);
-  const totalExpense = allTx.filter((t: any) => t.type === "expense").reduce((sum: number, t: any) => sum + t.amount, 0);
+  const totalIncome = allTx.filter((t: any) => t.type === "income").reduce((sum: number, t: any) => sum + (t.amount_default ?? t.amount), 0);
+  const totalExpense = allTx.filter((t: any) => t.type === "expense").reduce((sum: number, t: any) => sum + (t.amount_default ?? t.amount), 0);
 
   // Monthly totals
-  const monthIncome = monthTx.filter((t: any) => t.type === "income").reduce((sum: number, t: any) => sum + t.amount, 0);
-  const monthExpense = monthTx.filter((t: any) => t.type === "expense").reduce((sum: number, t: any) => sum + t.amount, 0);
+  const monthIncome = monthTx.filter((t: any) => t.type === "income").reduce((sum: number, t: any) => sum + (t.amount_default ?? t.amount), 0);
+  const monthExpense = monthTx.filter((t: any) => t.type === "expense").reduce((sum: number, t: any) => sum + (t.amount_default ?? t.amount), 0);
 
   // Year totals
-  const yearIncome = yearTx.filter((t: any) => t.type === "income").reduce((sum: number, t: any) => sum + t.amount, 0);
-  const yearExpense = yearTx.filter((t: any) => t.type === "expense").reduce((sum: number, t: any) => sum + t.amount, 0);
+  const yearIncome = yearTx.filter((t: any) => t.type === "income").reduce((sum: number, t: any) => sum + (t.amount_default ?? t.amount), 0);
+  const yearExpense = yearTx.filter((t: any) => t.type === "expense").reduce((sum: number, t: any) => sum + (t.amount_default ?? t.amount), 0);
 
   // Monthly trend (last 6 months)
   const months = getLast6Months();
@@ -64,8 +64,8 @@ dashboard.get("/", async (c) => {
     const monthTx2 = allTx.filter((t: any) => t.date.startsWith(m));
     return {
       month: m,
-      income: monthTx2.filter((t: any) => t.type === "income").reduce((sum: number, t: any) => sum + t.amount, 0),
-      expense: monthTx2.filter((t: any) => t.type === "expense").reduce((sum: number, t: any) => sum + t.amount, 0),
+      income: monthTx2.filter((t: any) => t.type === "income").reduce((sum: number, t: any) => sum + (t.amount_default ?? t.amount), 0),
+      expense: monthTx2.filter((t: any) => t.type === "expense").reduce((sum: number, t: any) => sum + (t.amount_default ?? t.amount), 0),
     };
   });
 
@@ -74,7 +74,7 @@ dashboard.get("/", async (c) => {
   const categoryBreakdown = categoriesList.map((cat: any) => {
     const catTotal = monthTx
       .filter((t: any) => t.category_id === cat.id)
-      .reduce((sum: number, t: any) => sum + t.amount, 0);
+      .reduce((sum: number, t: any) => sum + (t.amount_default ?? t.amount), 0);
     return {
       categoryId: cat.id,
       name: cat.name,

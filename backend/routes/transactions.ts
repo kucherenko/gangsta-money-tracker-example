@@ -57,8 +57,17 @@ tx.post("/", async (c) => {
 
   const data = parsed.data;
   run(
-    "INSERT INTO transactions (amount, description, date, type, category_id) VALUES (?, ?, ?, ?, ?)",
-    [data.amount, data.description || null, data.date, data.type, data.categoryId || null],
+    "INSERT INTO transactions (amount, currency, amount_default, exchange_rate, description, date, type, category_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [
+      data.amount,
+      data.currency || "USD",
+      data.amountDefault ?? data.amount,
+      data.exchangeRate ?? 1.0,
+      data.description || null,
+      data.date,
+      data.type,
+      data.categoryId || null,
+    ],
   );
   const result = lastInsertedRow("transactions");
   return c.json(transformTransaction(result), 201);
@@ -80,6 +89,9 @@ tx.put("/:id", async (c) => {
   const params: any[] = [];
 
   if (data.amount !== undefined) { updates.push("amount = ?"); params.push(data.amount); }
+  if (data.currency !== undefined) { updates.push("currency = ?"); params.push(data.currency); }
+  if (data.amountDefault !== undefined) { updates.push("amount_default = ?"); params.push(data.amountDefault); }
+  if (data.exchangeRate !== undefined) { updates.push("exchange_rate = ?"); params.push(data.exchangeRate); }
   if (data.description !== undefined) { updates.push("description = ?"); params.push(data.description); }
   if (data.date !== undefined) { updates.push("date = ?"); params.push(data.date); }
   if (data.type !== undefined) { updates.push("type = ?"); params.push(data.type); }
@@ -102,6 +114,9 @@ function transformTransaction(row: any) {
   return {
     id: row.id,
     amount: row.amount,
+    currency: row.currency,
+    amountDefault: row.amount_default,
+    exchangeRate: row.exchange_rate,
     description: row.description,
     date: row.date,
     type: row.type,

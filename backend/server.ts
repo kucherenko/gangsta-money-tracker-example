@@ -9,6 +9,11 @@ import transactionRoutes from "./routes/transactions";
 import categoryRoutes from "./routes/categories";
 import dashboardRoutes from "./routes/dashboard";
 
+import currenciesRoutes from "./routes/currencies";
+import settingsRoutes from "./routes/settings";
+import ratesRoutes from "./routes/rates";
+import { startRateFetcher } from "./services/rateFetcher";
+
 // Initialize database tables
 initDb();
 
@@ -23,6 +28,9 @@ app.route("/auth", authRoutes);
 app.route("/transactions", transactionRoutes);
 app.route("/categories", categoryRoutes);
 app.route("/dashboard", dashboardRoutes);
+app.route("/currencies", currenciesRoutes);
+app.route("/settings", settingsRoutes);
+app.route("/rates", ratesRoutes);
 
 // Health check
 app.get("/health", (c) => c.json({ status: "ok" }));
@@ -32,6 +40,9 @@ app.onError(errorHandler);
 
 // Seed on startup
 seed().catch(console.error);
+
+// Start rate fetcher (non-blocking)
+const stopRateFetcher = startRateFetcher();
 
 const port = process.env.PORT ? Number(process.env.PORT) : 3001;
 console.log(`Server starting on port ${port}`);

@@ -50,7 +50,7 @@ export const api = {
   },
 
   // Transactions
-  getTransactions: (params?: { page?: number; limit?: number; dateFrom?: string; dateTo?: string; categoryId?: number; type?: string; sortBy?: string; sortOrder?: string }) => {
+  getTransactions: (params?: { page?: number; limit?: number; dateFrom?: string; dateTo?: string; categoryId?: number; type?: string; sortBy?: string; sortOrder?: string; currency?: string }) => {
     const search = new URLSearchParams();
     if (params?.page) search.set("page", String(params.page));
     if (params?.limit) search.set("limit", String(params.limit));
@@ -60,6 +60,7 @@ export const api = {
     if (params?.type) search.set("type", params.type);
     if (params?.sortBy) search.set("sortBy", params.sortBy);
     if (params?.sortOrder) search.set("sortOrder", params.sortOrder);
+    if (params?.currency) search.set("currency", params.currency);
     return fetchJson(`/transactions?${search.toString()}`);
   },
   getTransaction: (id: number) => fetchJson(`/transactions/${id}`),
@@ -75,6 +76,25 @@ export const api = {
 
   // Dashboard
   getDashboard: () => fetchJson("/dashboard"),
+
+  // Currencies
+  getCurrencies: (type?: string) => {
+    const search = type ? `?type=${type}` : "";
+    return fetchJson(`/currencies${search}`);
+  },
+  getCurrency: (code: string) => fetchJson(`/currencies/${code}`),
+
+  // Settings
+  getSettings: () => fetchJson("/settings"),
+  updateSettings: (data: any) => fetchJson("/settings", { method: "PUT", body: JSON.stringify(data) }),
+
+  // Rates
+  getRates: (base?: string) => {
+    const search = base ? `?base=${base}` : "";
+    return fetchJson(`/rates${search}`);
+  },
+  getRate: (base: string, target: string) => fetchJson(`/rates/${base}/${target}`),
+  refreshRates: () => fetchJson("/rates/refresh", { method: "POST" }),
 
   // Token helpers
   setToken(newToken: string) {

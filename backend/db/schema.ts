@@ -19,10 +19,47 @@ export const categories = sqliteTable("categories", {
   isPredefined: integer("is_predefined", { mode: "boolean" }).notNull().default(false),
 });
 
+// ─── Currencies ──────────────────────────────────────────────────────────────
+export const currencies = sqliteTable("currencies", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  symbol: text("symbol"),
+  precision: integer("precision").notNull().default(2),
+  type: text("type", { enum: ["fiat", "crypto"] }).notNull(),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+});
+
+// ─── Exchange Rates ───────────────────────────────────────────────────────────
+export const exchangeRates = sqliteTable("exchange_rates", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  baseCurrency: text("base_currency").notNull(),
+  targetCurrency: text("target_currency").notNull(),
+  rate: real("rate").notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+  source: text("source", { enum: ["frankfurter", "coingecko"] }).notNull(),
+}, (table) => ({
+  uniquePair: table.baseCurrency.append(table.targetCurrency).unique(),
+}));
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
+export const settings = sqliteTable("settings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").references(() => users.id),
+  defaultCurrency: text("default_currency").notNull().default("USD"),
+  fiatFetchInterval: integer("fiat_fetch_interval").notNull().default(60),
+  cryptoFetchInterval: integer("crypto_fetch_interval").notNull().default(5),
+  autoFetchRates: integer("auto_fetch_rates", { mode: "boolean" }).notNull().default(true),
+  showCryptoOnDashboard: integer("show_crypto_on_dashboard", { mode: "boolean" }).notNull().default(true),
+});
+
 // ─── Transactions ─────────────────────────────────────────────────────────────
 export const transactions = sqliteTable("transactions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  amount: real("amount").notNull(),
+  amount: integer("amount").notNull(),
+  currency: text("currency").notNull().default("USD"),
+  amountDefault: integer("amount_default"),
+  exchangeRate: real("exchange_rate"),
   description: text("description"),
   date: text("date").notNull(), // YYYY-MM-DD
   type: text("type", { enum: ["income", "expense"] }).notNull(),
@@ -39,6 +76,10 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
 }));
 
 export const categoriesRelations = relations(categories, ({ many }) => ({
+  transactions: many(transactions),
+}));
+
+export const currenciesRelations = relations(currencies, ({ many }) => ({
   transactions: many(transactions),
 }));
 

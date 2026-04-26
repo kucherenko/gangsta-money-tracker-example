@@ -1,15 +1,17 @@
 <script lang="ts">
   import { transactions } from "../state/transactions.svelte";
   import { categories } from "../state/categories.svelte";
+  import { settings } from "../state/settings.svelte";
   import { onMount } from "svelte";
 
   onMount(() => {
     transactions.load();
     categories.load();
+    settings.load();
   });
 
-  function formatCurrency(value: number): string {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+  function formatCurrency(value: number, currencyCode: string): string {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: currencyCode }).format(value);
   }
 
   function formatDate(dateStr: string): string {
@@ -23,6 +25,10 @@
   async function handleDelete(id: number) {
     if (!confirm("Are you sure you want to delete this transaction?")) return;
     await transactions.deleteTransaction(id);
+  }
+
+  function formatAmount(value: number, currencyCode: string): string {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: currencyCode }).format(value);
   }
 </script>
 
@@ -120,8 +126,15 @@
                   <span class="text-gray-400">Uncategorized</span>
                 {/if}
               </td>
-              <td class="px-4 py-3 text-right font-medium {tx.type === 'income' ? 'text-green-600' : 'text-red-600'}">
-                {tx.type === "income" ? "+" : "−"}{formatCurrency(tx.amount)}
+              <td class="px-4 py-3 text-right">
+                <div class="font-medium {tx.type === 'income' ? 'text-green-600' : 'text-red-600'}">
+                  {tx.type === "income" ? "+" : "−"}{formatCurrency(tx.amountDefault ?? tx.amount, settings.data?.defaultCurrency || "USD")}
+                </div>
+                {#if tx.currency !== (settings.data?.defaultCurrency || "USD")}
+                  <div class="text-xs text-gray-400">
+                    {formatCurrency(tx.amount, tx.currency)} @ {tx.exchangeRate}
+                  </div>
+                {/if}
               </td>
               <td class="px-4 py-3 text-right">
                 <div class="flex justify-end gap-2">
