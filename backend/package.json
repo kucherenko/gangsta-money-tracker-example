@@ -10,9 +10,10 @@
   },
   "dependencies": {
     "@money-tracker/shared": "*",
+    "bcryptjs": "latest",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.7",
-    "zod": "latest",
-    "bcryptjs": "latest"
+    "zod": "latest"
   },
   "devDependencies": {
     "typescript": "latest",

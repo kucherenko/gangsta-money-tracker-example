@@ -1,4 +1,4 @@
-import { client } from "./index";
+import { client, ensureSettingsRow } from "./index";
 import { hash } from "bcryptjs";
 
 const DEFAULT_CATEGORIES = [

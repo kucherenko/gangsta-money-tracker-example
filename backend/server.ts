@@ -45,12 +45,22 @@ seed().catch(console.error);
 const stopRateFetcher = startRateFetcher();
 
 const port = process.env.PORT ? Number(process.env.PORT) : 3001;
-console.log(`Server starting on port ${port}`);
 
-export default {
+// Export Hono app for tests
+export default app;
+
+// Server config for manual start
+export const serverConfig = {
   port,
   fetch: app.fetch,
   hostname: "0.0.0.0",
 };
+
+// Auto-start when directly running (not imported as module)
+const isMain = import.meta.main ?? false;
+if (isMain) {
+  Bun.serve(serverConfig);
+  console.log(`Server starting on port ${port}`);
+}
 
 export type App = typeof app;

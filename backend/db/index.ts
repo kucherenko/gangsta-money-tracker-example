@@ -170,7 +170,7 @@ export function seedCurrencies() {
   }
 }
 
-function ensureSettingsRow() {
+export function ensureSettingsRow() {
   const count = getOne("SELECT COUNT(*) as count FROM settings") as any;
   if (!count || count.count === 0) {
     client.exec(`INSERT INTO settings (default_currency) VALUES ('USD')`);
