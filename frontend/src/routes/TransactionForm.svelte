@@ -5,6 +5,7 @@
   import { rates } from "../state/rates.svelte";
   import { onMount } from "svelte";
   import { insertTransactionSchema } from "@money-tracker/shared/schemas";
+  import { getCurrencyEmoji, ISO_4217_CURRENCIES, COMMON_CRYPTOS } from "@money-tracker/shared/currencyData";
   import { api } from "../lib/api";
 
   onMount(() => {
@@ -159,7 +160,9 @@
   }
 
   function getCurrencies() {
-    return settings.currencies || [];
+    const active = settings.activeCurrencies("fiat") || [];
+    const activeCrypto = settings.activeCurrencies("crypto") || [];
+    return [...active, ...activeCrypto];
   }
 
   function getDefaultCurrency() {
@@ -228,12 +231,14 @@
           {#if getCurrencies().length > 0}
             <optgroup label="Fiat">
               {#each getCurrencies().filter((c: any) => c.type === 'fiat') as c}
-                <option value={c.code}>{c.symbol || c.code} — {c.name}</option>
+                {@const emoji = getCurrencyEmoji(c.code)}
+                <option value={c.code}>{emoji ? emoji + " " : ""}{c.symbol || c.code} — {c.name}</option>
               {/each}
             </optgroup>
             <optgroup label="Crypto">
               {#each getCurrencies().filter((c: any) => c.type === 'crypto') as c}
-                <option value={c.code}>{c.symbol || c.code} — {c.name}</option>
+                {@const emoji = getCurrencyEmoji(c.code)}
+                <option value={c.code}>{emoji ? emoji + " " : ""}{c.symbol || c.code} — {c.name}</option>
               {/each}
             </optgroup>
           {:else}

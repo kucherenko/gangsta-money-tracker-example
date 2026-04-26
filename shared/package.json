@@ -6,7 +6,8 @@
   "main": "./index.ts",
   "exports": {
     ".": "./index.ts",
-    "./schemas": "./schemas.ts"
+    "./schemas": "./schemas.ts",
+    "./currencyData": "./currencyData.ts"
   },
   "dependencies": {
     "zod": "latest"

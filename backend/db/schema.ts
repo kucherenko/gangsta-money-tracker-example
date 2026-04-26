@@ -28,6 +28,7 @@ export const currencies = sqliteTable("currencies", {
   precision: integer("precision").notNull().default(2),
   type: text("type", { enum: ["fiat", "crypto"] }).notNull(),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
 });
 
 // ─── Exchange Rates ───────────────────────────────────────────────────────────

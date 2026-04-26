@@ -78,12 +78,18 @@ export const api = {
   getDashboard: () => fetchJson("/dashboard"),
 
   // Currencies
-  getCurrencies: (type?: string) => {
-    const search = type ? `?type=${type}` : "";
-    return fetchJson(`/currencies${search}`);
+  getCurrencies: (type?: string, all?: boolean) => {
+    const search = new URLSearchParams();
+    if (type) search.set("type", type);
+    if (all) search.set("all", "true");
+    const qs = search.toString();
+    return fetchJson(`/currencies${qs ? `?${qs}` : ""}`);
   },
   getCurrency: (code: string) => fetchJson(`/currencies/${code}`),
   createCurrency: (data: any) => fetchJson("/currencies", { method: "POST", body: JSON.stringify(data) }),
+  updateCurrency: (code: string, data: any) => fetchJson(`/currencies/${code}`, { method: "PUT", body: JSON.stringify(data) }),
+  exportCurrencies: () => fetchJson("/currencies/export"),
+  importCurrencies: (data: any[]) => fetchJson("/currencies/import", { method: "POST", body: JSON.stringify(data) }),
 
   // Settings
   getSettings: () => fetchJson("/settings"),

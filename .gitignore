@@ -37,6 +37,7 @@ backend/db/data.sqlite*
 backend/db/migrate*
 
 # Build output
+backend/dist/
 frontend/dist/
 *.tgz
 

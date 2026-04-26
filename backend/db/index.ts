@@ -36,7 +36,8 @@ export function initDb() {
       symbol TEXT,
       precision INTEGER NOT NULL DEFAULT 2,
       type TEXT NOT NULL,
-      is_active INTEGER NOT NULL DEFAULT 1
+      is_active INTEGER NOT NULL DEFAULT 1,
+      sort_order INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS exchange_rates (
@@ -89,6 +90,9 @@ export function initDb() {
 
   // Step 5: Create default settings row if missing
   ensureSettingsRow();
+
+  // Step 6: Migrate currencies table (add sort_order if missing)
+  migrateCurrenciesTable();
 }
 
 // Migration helpers
@@ -167,6 +171,18 @@ export function seedCurrencies() {
   
   for (const c of allCurrencies) {
     stmt.run(c.code, c.name, c.symbol, c.precision, c.type);
+  }
+}
+
+function migrateCurrenciesTable() {
+  const columns = getTableColumns("currencies");
+  if (!columns.includes("sort_order")) {
+    client.exec(`ALTER TABLE currencies ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`);
+    // Seed sort_order from existing order: all active currencies first, then by type, then code
+    const rows = client.prepare("SELECT id FROM currencies ORDER BY type, code").all() as any[];
+    for (let i = 0; i < rows.length; i++) {
+      client.prepare("UPDATE currencies SET sort_order = ? WHERE id = ?").run(i, rows[i].id);
+    }
   }
 }
 
