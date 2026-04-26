@@ -1,0 +1,21 @@
+{
+  "name": "@money-tracker/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch server.ts",
+    "start": "bun run server.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@money-tracker/shared": "*",
+    "hono": "^4.7",
+    "zod": "latest",
+    "bcryptjs": "latest"
+  },
+  "devDependencies": {
+    "typescript": "latest",
+    "@types/bcryptjs": "latest"
+  }
+}

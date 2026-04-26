@@ -1,0 +1,25 @@
+{
+  "name": "money-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "frontend",
+    "backend",
+    "shared"
+  ],
+  "scripts": {
+    "dev:frontend": "bun run --cwd frontend dev",
+    "dev:backend": "bun run --cwd backend dev",
+    "build:frontend": "bun run --cwd frontend build",
+    "build:backend": "bun run --cwd backend build",
+    "test:frontend": "bun run --cwd frontend test",
+    "test:backend": "bun run --cwd backend test",
+    "db:migrate": "bun run --cwd backend db:migrate",
+    "db:generate": "bun run --cwd backend db:generate"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.4",
+    "autoprefixer": "^10.5.0"
+  }
+}
