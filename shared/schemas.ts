@@ -118,13 +118,20 @@ export const transactionSchema = z.object({
 export const insertTransactionSchema = z.object({
   amount: z.number().positive(),
   currency: z.string().min(1).max(10).default("USD"),
-  amountDefault: z.number().positive(),
+  amountDefault: z.number().positive().optional(),
   exchangeRate: z.number().positive().optional(),
   description: z.string().max(255).optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // YYYY-MM-DD
   type: transactionTypeSchema,
   categoryId: z.number().int().optional(),
 });
+
+// Backend computes amountDefault if not provided
+export const computedTransactionSchema = insertTransactionSchema.transform((data) => ({
+  ...data,
+  amountDefault: data.amountDefault ?? data.amount,
+  exchangeRate: data.exchangeRate ?? 1.0,
+}));
 
 export const updateTransactionSchema = insertTransactionSchema.partial().refine(
   (data) => Object.keys(data).length > 0,
