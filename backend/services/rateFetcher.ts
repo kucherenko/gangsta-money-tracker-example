@@ -1,4 +1,4 @@
-import { run, getOne } from "../db";
+import { run, getOne, query } from "../db";
 
 const FRANKFURTER_URL = "https://api.frankfurter.app/latest";
 const COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price";
@@ -6,21 +6,26 @@ const COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price";
 // Global state to track if a fetch is in progress
 let isFetching = false;
 
-export async function fetchFiatRates(): Promise<void> {
+/**
+ * Fetch fiat rates for a specific base currency.
+ * If no base is specified, uses the user's default currency from settings.
+ */
+export async function fetchFiatRates(baseCurrency?: string): Promise<void> {
   
   try {
     const settings = getOne("SELECT * FROM settings LIMIT 1") as any;
     if (!settings || !settings.auto_fetch_rates) return;
 
-    // Get list of fiat currencies from DB
-    const currencies = run("SELECT code FROM currencies WHERE type = 'fiat' AND code != ?", [settings.default_currency || "USD"]);
+    const base = baseCurrency || settings.default_currency || "USD";
+
+    // Get list of fiat currencies from DB (all except base)
+    const currencies = run("SELECT code FROM currencies WHERE type = 'fiat' AND code != ?", [base]);
     const fiatCodes = (currencies as any[]).map(c => c.code).filter(Boolean);
     
     if (fiatCodes.length === 0) return;
 
-    // Fetch from frankfurter (base = default currency)
-    const base = settings.default_currency || "USD";
-    const symbols = fiatCodes.filter(c => c !== base).join(",");
+    // Fetch from frankfurter
+    const symbols = fiatCodes.filter((c: string) => c !== base).join(",");
     
     if (!symbols) return;
 
@@ -28,14 +33,14 @@ export async function fetchFiatRates(): Promise<void> {
     const response = await fetch(url, { headers: { "Accept": "application/json" } });
     
     if (!response.ok) {
-      console.warn(` frankfurter API returned ${response.status}`);
+      console.warn(`frankfurter API returned ${response.status} for ${base}`);
       return;
     }
     
     const data = await response.json();
     
     if (!data?.rates) {
-      console.warn(" frankfurter: unexpected response format");
+      console.warn("frankfurter: unexpected response format");
       return;
     }
 
@@ -43,25 +48,13 @@ export async function fetchFiatRates(): Promise<void> {
     for (const [target, rate] of Object.entries(data.rates)) {
       if (typeof rate !== "number") continue;
       
-      // Upsert: update if exists, insert if not
-      const existing = getOne(
-        "SELECT id FROM exchange_rates WHERE base_currency = ? AND target_currency = ?",
-        [base, target]
-      ) as any;
-      
       const now = Math.floor(Date.now() / 1000);
       
-      if (existing) {
-        run(
-          "UPDATE exchange_rates SET rate = ?, updated_at = ?, source = ? WHERE id = ?",
-          [rate, now, "frankfurter", existing.id]
-        );
-      } else {
-        run(
-          "INSERT INTO exchange_rates (base_currency, target_currency, rate, updated_at, source) VALUES (?, ?, ?, ?, ?)",
-          [base, target, rate, now, "frankfurter"]
-        );
-      }
+      // Upsert: update if exists, insert if not
+      upsertRate(base, target, rate, now, "frankfurter");
+      
+      // Also store the reverse rate (useful for lookups)
+      upsertRate(target, base, 1 / rate, now, "frankfurter");
     }
     
     console.log(`[rates] Fetched ${Object.keys(data.rates).length} fiat rates, base: ${base}`);
@@ -70,10 +63,15 @@ export async function fetchFiatRates(): Promise<void> {
   }
 }
 
-export async function fetchCryptoRates(): Promise<void> {
+/**
+ * Fetch crypto rates for a specific base currency.
+ */
+export async function fetchCryptoRates(baseCurrency?: string): Promise<void> {
   try {
     const settings = getOne("SELECT * FROM settings LIMIT 1") as any;
     if (!settings || !settings.auto_fetch_rates) return;
+
+    const base = baseCurrency || settings.default_currency || "USD";
 
     // Get list of crypto currencies from DB
     const currencies = run("SELECT code FROM currencies WHERE type = 'crypto'") as any[];
@@ -81,14 +79,16 @@ export async function fetchCryptoRates(): Promise<void> {
     
     if (cryptoCodes.length === 0) return;
 
-    const vs_currency = settings.default_currency?.toLowerCase() || "usd";
+    // CoinGecko vs_currency must be lowercase, valid: btc, eth, usd, etc.
+    // But fiat codes like EUR are also supported on free tier
+    const vs_currency = base.toLowerCase();
     const ids = "bitcoin,ethereum,solana,ripple,cardano";
     
     const url = `${COINGECKO_URL}?ids=${ids}&vs_currencies=${vs_currency}`;
     const response = await fetch(url, { headers: { "Accept": "application/json" } });
     
     if (!response.ok) {
-      console.warn(` CoinGecko API returned ${response.status}`);
+      console.warn(`CoinGecko API returned ${response.status}: ${await response.text()}`);
       return;
     }
     
@@ -104,7 +104,6 @@ export async function fetchCryptoRates(): Promise<void> {
     };
 
     const vsKey = vs_currency;
-    const base = settings.default_currency || "USD";
     
     let count = 0;
     for (const [coinId, prices] of Object.entries(data)) {
@@ -114,24 +113,17 @@ export async function fetchCryptoRates(): Promise<void> {
       const rate = prices[vsKey] as number;
       const now = Math.floor(Date.now() / 1000);
       
-      // Upsert
-      const existing = getOne(
-        "SELECT id FROM exchange_rates WHERE base_currency = ? AND target_currency = ?",
-        [base, code]
-      ) as any;
+      // Store: base = EUR, target = BTC (how much BTC is 1 EUR worth?)
+      // Actually, CoinGecko returns: 1 BTC = X EUR
+      // So rate = X means: 1 BTC = X EUR
+      // We want: EUR → BTC: 1 EUR = 1/X BTC
+      // And: BTC → EUR: 1 BTC = X EUR
       
-      if (existing) {
-        run(
-          "UPDATE exchange_rates SET rate = ?, updated_at = ?, source = ? WHERE id = ?",
-          [rate, now, "coingecko", existing.id]
-        );
-      } else {
-        run(
-          "INSERT INTO exchange_rates (base_currency, target_currency, rate, updated_at, source) VALUES (?, ?, ?, ?, ?)",
-          [base, code, rate, now, "coingecko"]
-        );
+      if (rate > 0) {
+        upsertRate(code, base, rate, now, "coingecko");         // BTC → EUR
+        upsertRate(base, code, 1 / rate, now, "coingecko");     // EUR → BTC
+        count++;
       }
-      count++;
     }
     
     console.log(`[rates] Fetched ${count} crypto rates, base: ${base}`);
@@ -140,14 +132,39 @@ export async function fetchCryptoRates(): Promise<void> {
   }
 }
 
-export async function fetchAllRates(): Promise<void> {
+function upsertRate(
+  base: string, 
+  target: string, 
+  rate: number, 
+  timestamp: number, 
+  source: string
+): void {
+  const existing = getOne(
+    "SELECT id FROM exchange_rates WHERE base_currency = ? AND target_currency = ?",
+    [base, target]
+  ) as any;
+  
+  if (existing) {
+    run(
+      "UPDATE exchange_rates SET rate = ?, updated_at = ?, source = ? WHERE id = ?",
+      [rate, timestamp, source, existing.id]
+    );
+  } else {
+    run(
+      "INSERT INTO exchange_rates (base_currency, target_currency, rate, updated_at, source) VALUES (?, ?, ?, ?, ?)",
+      [base, target, rate, timestamp, source]
+    );
+  }
+}
+
+export async function fetchAllRates(baseCurrency?: string): Promise<void> {
   if (isFetching) return;
   isFetching = true;
   
   try {
     await Promise.all([
-      fetchFiatRates(),
-      fetchCryptoRates(),
+      fetchFiatRates(baseCurrency),
+      fetchCryptoRates(baseCurrency),
     ]);
   } finally {
     isFetching = false;
@@ -160,18 +177,28 @@ export function startRateFetcher(): () => void {
     fetchAllRates().catch(console.error);
   }, 1000);
 
-  // Schedule periodic fetches
-  const settings = getOne("SELECT * FROM settings LIMIT 1") as any;
-  const fiatInterval = (settings?.fiat_fetch_interval || 60) * 60 * 1000; // minutes to ms
-  const cryptoInterval = (settings?.crypto_fetch_interval || 5) * 60 * 1000; // minutes to ms
+  // Schedule periodic fetches using latest settings
+  let fiatTimer: ReturnType<typeof setInterval>;
+  let cryptoTimer: ReturnType<typeof setInterval>;
 
-  const fiatTimer = setInterval(() => {
-    fetchFiatRates().catch(console.error);
-  }, fiatInterval);
+  function schedule() {
+    const settings = getOne("SELECT * FROM settings LIMIT 1") as any;
+    const fiatInterval = (settings?.fiat_fetch_interval || 60) * 60 * 1000;
+    const cryptoInterval = (settings?.crypto_fetch_interval || 5) * 60 * 1000;
 
-  const cryptoTimer = setInterval(() => {
-    fetchCryptoRates().catch(console.error);
-  }, cryptoInterval);
+    clearInterval(fiatTimer);
+    clearInterval(cryptoTimer);
+
+    fiatTimer = setInterval(() => {
+      fetchFiatRates().catch(console.error);
+    }, fiatInterval);
+
+    cryptoTimer = setInterval(() => {
+      fetchCryptoRates().catch(console.error);
+    }, cryptoInterval);
+  }
+
+  schedule();
 
   // Return cleanup function
   return () => {
@@ -180,16 +207,51 @@ export function startRateFetcher(): () => void {
   };
 }
 
-export function getRate(base: string, target: string): { rate: number; updatedAt: number } | null {
+/**
+ * Get cached rate between two currencies.
+ * Supports reverse lookup if forward rate doesn't exist.
+ */
+export function getRate(base: string, target: string): { rate: number; updatedAt: number; source: string } | null {
+  // First try: exact match
   const row = getOne(
-    "SELECT rate, updated_at FROM exchange_rates WHERE base_currency = ? AND target_currency = ?",
+    "SELECT rate, updated_at, source FROM exchange_rates WHERE base_currency = ? AND target_currency = ?",
     [base, target]
   ) as any;
   
-  if (!row) return null;
+  if (row) {
+    return {
+      rate: row.rate,
+      updatedAt: row.updated_at,
+      source: row.source,
+    };
+  }
   
-  return {
-    rate: row.rate,
-    updatedAt: row.updated_at,
-  };
+  // Second try: reverse lookup
+  const reverseRow = getOne(
+    "SELECT rate, updated_at, source FROM exchange_rates WHERE base_currency = ? AND target_currency = ?",
+    [target, base]
+  ) as any;
+  
+  if (reverseRow && reverseRow.rate > 0) {
+    return {
+      rate: 1 / reverseRow.rate,
+      updatedAt: reverseRow.updated_at,
+      source: reverseRow.source,
+    };
+  }
+  
+  return null;
+}
+
+/**
+ * Get all rates for a given base currency (or default)
+ */
+export function getRatesForBase(base?: string): any[] {
+  const settings = getOne("SELECT * FROM settings LIMIT 1") as any;
+  const baseCurrency = base || settings?.default_currency || "USD";
+  
+  return query(
+    "SELECT * FROM exchange_rates WHERE base_currency = ? ORDER BY target_currency",
+    [baseCurrency]
+  ) as any[];
 }
