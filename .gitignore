@@ -1,2 +1,16 @@
+frontend/dist/
+frontend/node_modules/
+backend/node_modules/
 backend/db/data.sqlite*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
 backend/db/migrate*

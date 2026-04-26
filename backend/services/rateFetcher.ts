@@ -7,7 +7,6 @@ const COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price";
 let isFetching = false;
 
 export async function fetchFiatRates(): Promise<void> {
-  if (isFetching) return;
   
   try {
     const settings = getOne("SELECT * FROM settings LIMIT 1") as any;

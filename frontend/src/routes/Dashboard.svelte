@@ -1,10 +1,23 @@
 <script lang="ts">
   import { dashboard } from "../state/dashboard.svelte";
+  import { settings } from "../state/settings.svelte";
   import BalanceCard from "../components/BalanceCard.svelte";
   import { onMount } from "svelte";
 
   onMount(() => {
     dashboard.load();
+    settings.load();
+  });
+
+  function formatAmount(value: number): string {
+    const currency = settings.data?.defaultCurrency || "USD";
+    return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(value);
+  }
+
+  // Derived: used currencies for rate display
+  let usedCurrencies = $derived(() => {
+    // This would ideally come from API - for now, check if we have multi-currency data
+    return settings.currencies?.filter((c: any) => c.code !== (settings.data?.defaultCurrency || "USD")) || [];
   });
 </script>
 
@@ -21,6 +34,24 @@
       <BalanceCard title="Income (This Month)" amount={dashboard.data.monthIncome} color="text-green-600" />
       <BalanceCard title="Expense (This Month)" amount={dashboard.data.monthExpense} color="text-red-600" />
     </div>
+
+    <!-- Exchange Rates Section -->
+    {#if settings.data?.showCryptoOnDashboard !== 0 && usedCurrencies().length > 0}
+      <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold text-gray-900">Exchange Rates</h2>
+          <span class="text-xs text-gray-400">{settings.data?.defaultCurrency || "USD"} rates</span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {#each usedCurrencies().slice(0, 4) as c}
+            <div class="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-50">
+              <span class="text-sm font-medium text-gray-700">{c.code}</span>
+              <span class="text-sm text-gray-500">{c.symbol || c.code}</span>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
@@ -59,7 +90,7 @@
                   <span class="text-sm text-gray-700">{cat.name}</span>
                 </div>
                 <span class="text-sm font-medium text-gray-900">
-                  {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cat.total)}
+                  {formatAmount(cat.total)}
                 </span>
               </div>
             {/each}
