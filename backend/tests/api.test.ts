@@ -1,3 +1,5 @@
+process.env.NODE_ENV = "test";
+
 import { testClient } from "hono/testing";
 import { describe, it, expect, beforeAll } from "bun:test";
 import { client, seedCurrencies } from "../db";
@@ -172,6 +174,78 @@ describe("Multi-Currency Feature", () => {
         expect(tx).toHaveProperty("amountDefault");
         expect(tx).toHaveProperty("exchangeRate");
       }
+    });
+  });
+
+  describe("Rate Fetcher", () => {
+    beforeAll(async () => {
+      // Ensure settings row exists for auto-fetch
+      client.prepare("INSERT OR REPLACE INTO settings (id, default_currency, auto_fetch_rates, fiat_fetch_interval, crypto_fetch_interval) VALUES (1, 'USD', 1, 60, 5)").run();
+      // Seed UAH and ALL as fiat currencies
+      client.prepare("INSERT OR IGNORE INTO currencies (code, name, symbol, precision, type, is_active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)").run("UAH", "Ukrainian Hryvnia", "₴", 2, "fiat", 1, 0);
+      client.prepare("INSERT OR IGNORE INTO currencies (code, name, symbol, precision, type, is_active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)").run("ALL", "Albanian Lek", "L", 2, "fiat", 1, 0);
+    });
+
+    it("fetches fiat rates for default base currency", async () => {
+      // Trigger rate fetch
+      await testApp.rates.refresh.$post(undefined, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      // Wait for async fetch
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+
+      // Check that rates were fetched for known currencies
+      const res = await testApp.rates.$get(undefined, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(Array.isArray(body)).toBe(true);
+      expect(body.length).toBeGreaterThan(0);
+    });
+
+    it("returns correct cross rate via reverse lookup", async () => {
+      // Direct DB insert for deterministic test — use a fake pair that Fawaz won't overwrite
+      const now = Math.floor(Date.now() / 1000);
+      client.prepare("INSERT OR REPLACE INTO exchange_rates (base_currency, target_currency, rate, updated_at, source) VALUES (?, ?, ?, ?, ?)").run("ZZZ", "YYY", 0.85, now, "test");
+
+      // Request YYY -> ZZZ (reverse of what's stored)
+      const res = await testApp.rates[":base"][":target"].$get({ param: { base: "YYY", target: "ZZZ" } }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.rate).toBeCloseTo(1 / 0.85, 2);
+    });
+
+    it("fetches rates for newly added fiat currencies like UAH and ALL", async () => {
+      // Make sure UAH and ALL are in the DB
+      client.prepare("INSERT OR IGNORE INTO currencies (code, name, symbol, precision, type, is_active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)").run("UAH", "Ukrainian Hryvnia", "₴", 2, "fiat", 1, 0);
+      client.prepare("INSERT OR IGNORE INTO currencies (code, name, symbol, precision, type, is_active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)").run("ALL", "Albanian Lek", "L", 2, "fiat", 1, 0);
+
+      // Trigger refresh
+      await testApp.rates.refresh.$post(undefined, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      // Wait for async fetch
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+
+      // Check UAH rate exists
+      const resUAH = await testApp.rates[":base"][":target"].$get({ param: { base: "USD", target: "UAH" } }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      expect(resUAH.status).toBe(200);
+      const bodyUAH = await resUAH.json();
+      expect(bodyUAH.rate).toBeGreaterThan(0);
+
+      // Check ALL rate exists
+      const resALL = await testApp.rates[":base"][":target"].$get({ param: { base: "USD", target: "ALL" } }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      expect(resALL.status).toBe(200);
+      const bodyALL = await resALL.json();
+      expect(bodyALL.rate).toBeGreaterThan(0);
     });
   });
 

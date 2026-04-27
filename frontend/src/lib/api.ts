@@ -1,3 +1,5 @@
+import type { ReceiptUploadResponse } from "@money-tracker/shared/schemas";
+
 const API_URL = "http://localhost:3001";
 
 function getToken(): string {
@@ -64,6 +66,33 @@ export const api = {
     return fetchJson(`/transactions?${search.toString()}`);
   },
   getTransaction: (id: number) => fetchJson(`/transactions/${id}`),
+
+  // OCR Receipt upload — multipart, NOT JSON
+  uploadReceipt: async (file: File): Promise<ReceiptUploadResponse> => {
+    const formData = new FormData();
+    formData.append("image", file);
+    const res = await fetch(`${API_URL}/api/ocr`, {
+      method: "POST",
+      headers: {
+        ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+      },
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: "Upload failed" }));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
+
+  // OCR Receipt from URL — JSON
+  uploadReceiptFromUrl: async (url: string): Promise<ReceiptUploadResponse> => {
+    return fetchJson("/api/ocr/url", {
+      method: "POST",
+      body: JSON.stringify({ url }),
+    });
+  },
+
   createTransaction: (data: any) => fetchJson("/transactions", { method: "POST", body: JSON.stringify(data) }),
   updateTransaction: (id: number, data: any) => fetchJson(`/transactions/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteTransaction: (id: number) => fetchJson(`/transactions/${id}`, { method: "DELETE" }),
@@ -88,6 +117,7 @@ export const api = {
   getCurrency: (code: string) => fetchJson(`/currencies/${code}`),
   createCurrency: (data: any) => fetchJson("/currencies", { method: "POST", body: JSON.stringify(data) }),
   updateCurrency: (code: string, data: any) => fetchJson(`/currencies/${code}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteCurrency: (code: string) => fetchJson(`/currencies/${code}`, { method: "DELETE" }),
   exportCurrencies: () => fetchJson("/currencies/export"),
   importCurrencies: (data: any[]) => fetchJson("/currencies/import", { method: "POST", body: JSON.stringify(data) }),
 

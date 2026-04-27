@@ -54,12 +54,15 @@ rates.post("/refresh", async (c) => {
 });
 
 function transformRate(row: any) {
+  const rawUpdated = row.updated_at || row.updatedAt;
+  // DB stores unix epoch in seconds; frontend expects milliseconds
+  const updatedAt = rawUpdated && rawUpdated < 1e12 ? rawUpdated * 1000 : rawUpdated;
   return {
     id: row.id || 0,
     baseCurrency: row.base_currency || row.base,
     targetCurrency: row.target_currency || row.target,
     rate: row.rate,
-    updatedAt: row.updated_at || row.updatedAt,
+    updatedAt: updatedAt || Date.now(),
     source: row.source,
   };
 }

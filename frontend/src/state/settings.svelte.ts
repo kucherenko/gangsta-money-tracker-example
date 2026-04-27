@@ -56,12 +56,12 @@ export class SettingsState {
     }
   }
 
-  async toggleCurrency(code: string, isActive: boolean) {
+  async deleteCurrency(code: string) {
     try {
-      await api.updateCurrency(code, { isActive });
+      await api.deleteCurrency(code);
       await this.load();
-    } catch (err) {
-      console.error("Failed to toggle currency:", err);
+    } catch (err: any) {
+      throw new Error(err.message || "Failed to delete currency");
     }
   }
 }

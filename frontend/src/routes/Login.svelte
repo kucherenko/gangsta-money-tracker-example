@@ -31,7 +31,10 @@
 
 <div class="min-h-[80vh] flex items-center justify-center">
   <div class="w-full max-w-sm bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-    <h1 class="text-2xl font-bold text-gray-900 text-center mb-6">Money Tracker</h1>
+    <div class="flex flex-col items-center mb-6">
+      <img src="/favicon.png" alt="Money Tracker" class="h-12 w-12 mb-2" />
+      <h1 class="text-2xl font-bold text-gray-900">Money Tracker</h1>
+    </div>
 
     {#if error}
       <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>

@@ -7,14 +7,17 @@
   import { insertTransactionSchema } from "@money-tracker/shared/schemas";
   import { getCurrencyEmoji, ISO_4217_CURRENCIES, COMMON_CRYPTOS } from "@money-tracker/shared/currencyData";
   import { api } from "../lib/api";
+  import ImageUpload from "../components/ImageUpload.svelte";
+  import OcrPreview from "../components/OcrPreview.svelte";
+  import type { ReceiptExtract } from "@money-tracker/shared/schemas";
 
   onMount(() => {
     categories.load();
     settings.load();
     rates.load();
-    const id = extractId();
-    if (id) {
-      loadTransaction(id);
+    const txId = extractId();
+    if (txId) {
+      loadTransaction(txId);
     }
   });
 
@@ -28,6 +31,119 @@
   let categoryId = $state<number | undefined>(undefined);
   let errors = $state<Record<string, string>>({});
   let loading = $state(false);
+
+  // ─── OCR State ──────────────────────────────────────────────────────────────
+  type FormSnapshot = { amount: string; currency: string; exchangeRate: string; description: string; date: string; type: "income" | "expense"; categoryId?: number };
+  type OcrSource = "file" | "url";
+  let mode = $state<"manual" | "ocr">("manual");
+  let ocrSource = $state<OcrSource>("file");
+  let manualBackup = $state<FormSnapshot | null>(null);
+  let ocrPreview = $state<ReceiptExtract | null>(null);
+  let receiptTempId = $state<string | null>(null);
+  let receiptTempExt = $state<string | null>(null);
+  let receiptUrl = $state("");
+  let scanning = $state(false);
+  let ocrError = $state<string | null>(null);
+
+  function snapshotForm(): FormSnapshot {
+    return { amount, currency, exchangeRate, description, date, type, categoryId };
+  }
+
+  function enterOcrMode() {
+    manualBackup = snapshotForm();
+    mode = "ocr";
+    ocrSource = "file";
+    ocrPreview = null;
+    receiptTempId = null;
+    receiptTempExt = null;
+    receiptUrl = "";
+    ocrError = null;
+  }
+
+  function exitOcrMode() {
+    if (manualBackup) {
+      const b = manualBackup;
+      amount = b.amount;
+      currency = b.currency;
+      exchangeRate = b.exchangeRate;
+      description = b.description;
+      date = b.date;
+      type = b.type;
+      categoryId = b.categoryId;
+      manualBackup = null;
+    }
+    mode = "manual";
+    ocrSource = "file";
+    ocrPreview = null;
+    receiptTempId = null;
+    receiptTempExt = null;
+    receiptUrl = "";
+    ocrError = null;
+  }
+
+  async function handleOcrSelect(file: File) {
+    scanning = true;
+    ocrError = null;
+    try {
+      const result = await api.uploadReceipt(file);
+      ocrPreview = result.suggestion;
+      receiptTempId = result.tempId;
+      receiptTempExt = result.tempExt;
+    } catch (err: any) {
+      ocrError = err.message || "Failed to scan receipt";
+      ocrPreview = null;
+      receiptTempId = null;
+      receiptTempExt = null;
+    } finally {
+      scanning = false;
+    }
+  }
+
+  async function handleOcrUrlSubmit() {
+    if (!receiptUrl.trim()) {
+      ocrError = "Please enter a URL";
+      return;
+    }
+    scanning = true;
+    ocrError = null;
+    try {
+      const result = await api.uploadReceiptFromUrl(receiptUrl.trim());
+      ocrPreview = result.suggestion;
+      receiptTempId = result.tempId;
+      receiptTempExt = result.tempExt;
+    } catch (err: any) {
+      ocrError = err.message || "Failed to fetch receipt from URL";
+      ocrPreview = null;
+      receiptTempId = null;
+      receiptTempExt = null;
+    } finally {
+      scanning = false;
+    }
+  }
+
+  function handleOcrApply() {
+    if (!ocrPreview) return;
+    amount = String(ocrPreview.amount);
+    currency = ocrPreview.currency || settings.data?.defaultCurrency || "USD";
+    description = ocrPreview.description || "";
+    date = ocrPreview.date || new Date().toISOString().split("T")[0];
+    // Type inference from category suggestion
+    if (ocrPreview.category) {
+      const matched = categories.items.find((c: any) => c.name.toLowerCase() === ocrPreview!.category!.toLowerCase());
+      if (matched) {
+        categoryId = matched.id;
+        type = matched.type;
+      }
+    }
+    // Trigger exchange rate lookup if foreign currency
+    onCurrencyChange();
+    mode = "manual";
+    manualBackup = null;
+  }
+
+  function handleOcrDiscard() {
+    exitOcrMode();
+  }
 
   // Rate state
   let rateInfo = $state<{ rate: number; updatedAt: number; source: string } | null>(null);
@@ -44,7 +160,7 @@
     const tx = await api.getTransaction(txId);
     amount = String(tx.amount);
     currency = tx.currency || "USD";
-    exchangeRate = tx.exchangeRate ? String(tx.exchangeRate) : "";
+    exchangeRate = tx.exchangeRate ? Number(tx.exchangeRate).toFixed(4) : "";
     description = tx.description || "";
     date = tx.date;
     type = tx.type;
@@ -62,25 +178,27 @@
       rateInfo = null;
       return;
     }
-    
+
     rateLoading = true;
-    
-    // Check if we have the rate in our store
-    const cached = rates.getRate(defaultCurrency, currency);
+
+    // We need the rate FROM transaction currency TO default currency
+    // so that amountDefault = amount * rate gives the correct conversion.
+    // e.g. for EUR transaction with default USD, we need EUR->USD (= 1 / USD->EUR)
+    const cached = rates.getRate(currency, defaultCurrency);
     if (cached) {
       rateInfo = cached;
-      exchangeRate = String(cached.rate);
+      exchangeRate = Number(cached.rate).toFixed(4);
     } else {
-      // Try fetching specific rate
+      // Try fetching specific rate (currency -> default)
       try {
-        const result = await api.getRate(defaultCurrency, currency);
+        const result = await api.getRate(currency, defaultCurrency);
         if (result?.rate) {
           rateInfo = {
             rate: result.rate,
             updatedAt: result.updatedAt ? new Date(result.updatedAt).getTime() : Date.now(),
             source: result.source,
           };
-          exchangeRate = String(result.rate);
+          exchangeRate = Number(result.rate).toFixed(4);
         } else {
           rateInfo = null;
         }
@@ -88,7 +206,7 @@
         rateInfo = null;
       }
     }
-    
+
     rateLoading = false;
   }
 
@@ -130,7 +248,7 @@
     const defaultCurrency = getDefaultCurrency();
     const amountDefault = currency === defaultCurrency ? amt : Math.round(amt * rate * 100) / 100;
     
-    const data = {
+    const data: any = {
       amount: amt,
       currency,
       amountDefault,
@@ -140,6 +258,11 @@
       type,
       categoryId,
     };
+
+    if (!id && receiptTempId && receiptTempExt) {
+      data.receiptTempId = receiptTempId;
+      data.receiptTempExt = receiptTempExt;
+    }
 
     try {
       if (id) {
@@ -195,6 +318,94 @@
 
   {#if errors.submit}
     <div class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{errors.submit}</div>
+  {/if}
+
+  <!-- Mode toggle -->
+  {#if !id && mode === "manual"}
+    <div class="mb-4">
+      <button
+        onclick={enterOcrMode}
+        class="w-full rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 inline-flex items-center justify-center gap-2"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        Scan Receipt from File or URL
+      </button>
+    </div>
+  {/if}
+
+  {#if !id && mode === "ocr"}
+    <div class="space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-gray-900">Scan Receipt</h2>
+        <button
+          onclick={exitOcrMode}
+          class="text-sm text-gray-500 hover:text-gray-700"
+        >Cancel</button>
+      </div>
+
+      {#if !ocrPreview}
+        <!-- Source toggle -->
+        <div class="flex rounded-lg border border-gray-200 overflow-hidden">
+          <button
+            type="button"
+            onclick={() => { ocrSource = "file"; ocrError = null; }}
+            class="flex-1 px-4 py-2 text-sm font-medium {ocrSource === 'file' ? 'bg-blue-50 text-blue-700 border-r' : 'bg-white text-gray-600 hover:bg-gray-50'}"
+          >
+            File
+          </button>
+          <button
+            type="button"
+            onclick={() => { ocrSource = "url"; ocrError = null; }}
+            class="flex-1 px-4 py-2 text-sm font-medium {ocrSource === 'url' ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-600 hover:bg-gray-50'}"
+          >
+            URL
+          </button>
+        </div>
+
+        {#if ocrSource === "file"}
+          <ImageUpload
+            onSelect={handleOcrSelect}
+            onCancel={exitOcrMode}
+          />
+        {:else}
+          <div class="space-y-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Receipt URL</label>
+              <input
+                type="url"
+                bind:value={receiptUrl}
+                placeholder="https://example.com/receipt.pdf"
+                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+              />
+            </div>
+            <button
+              type="button"
+              onclick={handleOcrUrlSubmit}
+              disabled={scanning}
+              class="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {scanning ? "Fetching receipt…" : "Fetch & Scan Receipt"}
+            </button>
+          </div>
+        {/if}
+
+        {#if scanning}
+          <p class="text-sm text-gray-500 text-center animate-pulse">Scanning receipt…</p>
+        {/if}
+        {#if ocrError}
+          <div class="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{ocrError}</div>
+        {/if}
+      {:else}
+        <OcrPreview
+          suggestion={ocrPreview}
+          onApply={handleOcrApply}
+          onDiscard={handleOcrDiscard}
+        />
+      {/if}
+    </div>
   {/if}
 
   <form onsubmit={handleSubmit} class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm space-y-4">
@@ -289,7 +500,7 @@
             </p>
           {:else}
             <p class="text-xs text-green-600">
-              Rate from {rateInfo.source === 'frankfurter' ? 'frankfurter.app' : 'CoinGecko'} — {getRateAge()}
+              Rate from {rateInfo.source === 'fawaz' ? 'fawazahmed0' : rateInfo.source} — {getRateAge()}
             </p>
           {/if}
         {:else}

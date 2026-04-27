@@ -18,6 +18,10 @@
     return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   }
 
+  function formatDateTime(dateStr: string): string {
+    return new Date(dateStr).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+
   function navigate(path: string) {
     window.location.hash = `#${path}`;
   }
@@ -27,8 +31,19 @@
     await transactions.deleteTransaction(id);
   }
 
-  function formatAmount(value: number, currencyCode: string): string {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency: currencyCode }).format(value);
+  function setSort(column: string): void {
+    if (transactions.filter.sortBy === column) {
+      transactions.filter.sortOrder = transactions.filter.sortOrder === "asc" ? "desc" : "asc";
+    } else {
+      transactions.filter.sortBy = column;
+      transactions.filter.sortOrder = column === "description" || column === "category" ? "asc" : "desc";
+    }
+    transactions.load();
+  }
+
+  function indicator(column: string): string {
+    if (transactions.filter.sortBy !== column) return "";
+    return transactions.filter.sortOrder === "asc" ? "↑" : "↓";
   }
 </script>
 
@@ -105,10 +120,11 @@
       <table class="w-full text-sm">
         <thead class="bg-gray-50 border-b border-gray-200">
           <tr>
-            <th class="px-4 py-3 text-left font-medium text-gray-500">Date</th>
-            <th class="px-4 py-3 text-left font-medium text-gray-500">Description</th>
-            <th class="px-4 py-3 text-left font-medium text-gray-500">Category</th>
-            <th class="px-4 py-3 text-right font-medium text-gray-500">Amount</th>
+            <th class="px-4 py-3 text-left font-medium cursor-pointer select-none group {transactions.filter.sortBy === 'date' ? 'text-blue-600' : 'text-gray-500'}" onclick={() => setSort('date')}>Date <span class="text-xs opacity-70">{indicator('date')}</span></th>
+            <th class="px-4 py-3 text-left font-medium cursor-pointer select-none group {transactions.filter.sortBy === 'description' ? 'text-blue-600' : 'text-gray-500'}" onclick={() => setSort('description')}>Description <span class="text-xs opacity-70">{indicator('description')}</span></th>
+            <th class="px-4 py-3 text-left font-medium cursor-pointer select-none group {transactions.filter.sortBy === 'category' ? 'text-blue-600' : 'text-gray-500'}" onclick={() => setSort('category')}>Category <span class="text-xs opacity-70">{indicator('category')}</span></th>
+            <th class="px-4 py-3 text-right font-medium cursor-pointer select-none group {transactions.filter.sortBy === 'amount' ? 'text-blue-600' : 'text-gray-500'}" onclick={() => setSort('amount')}>Amount <span class="text-xs opacity-70">{indicator('amount')}</span></th>
+            <th class="px-4 py-3 text-right font-medium cursor-pointer select-none group {transactions.filter.sortBy === 'createdAt' ? 'text-blue-600' : 'text-gray-500'}" onclick={() => setSort('createdAt')}>Created <span class="text-xs opacity-70">{indicator('createdAt')}</span></th>
             <th class="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
           </tr>
         </thead>
@@ -136,6 +152,13 @@
                   </div>
                 {/if}
               </td>
+              <td class="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
+                {#if tx.createdAt}
+                  {formatDateTime(tx.createdAt)}
+                {:else}
+                  <span class="text-gray-300">——</span>
+                {/if}
+              </td>
               <td class="px-4 py-3 text-right">
                 <div class="flex justify-end gap-2">
                   <button
@@ -151,7 +174,7 @@
             </tr>
           {:else}
             <tr>
-              <td colspan="5" class="px-4 py-12 text-center text-gray-500">No transactions found</td>
+              <td colspan="6" class="px-4 py-12 text-center text-gray-500">No transactions found</td>
             </tr>
           {/each}
         </tbody>

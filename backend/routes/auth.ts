@@ -26,7 +26,12 @@ auth.post("/login", async (c) => {
     throw new HTTPException(401, { message: "Invalid credentials" });
   }
 
-  const secret = process.env.JWT_SECRET || "money-tracker-secret-key";
+  const isProduction = process.env.NODE_ENV === "production";
+  const jwtSecret = process.env.JWT_SECRET;
+  if (isProduction && !jwtSecret) {
+    throw new HTTPException(500, { message: "JWT_SECRET is not configured" });
+  }
+  const secret = jwtSecret || "money-tracker-secret-key";
   const token = await sign({ userId: user.id }, secret);
 
   run("UPDATE users SET token = ? WHERE id = ?", [token, user.id]);

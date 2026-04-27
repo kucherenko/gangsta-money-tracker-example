@@ -14,13 +14,16 @@ const DEFAULT_CATEGORIES = [
   { name: "Other", color: "#64748b", icon: "Tag", type: "expense", isPredefined: 1 },
 ];
 
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin";
+
 export async function seed() {
   try {
-    const userResult = client.prepare("SELECT * FROM users WHERE username = ?").get("admin");
+    const userResult = client.prepare("SELECT * FROM users WHERE username = ?").get(ADMIN_USERNAME);
     if (!userResult) {
-      const passwordHash = await hash("admin", 12);
-      client.prepare("INSERT INTO users (username, password_hash) VALUES (?, ?)").run("admin", passwordHash);
-      console.log("Created admin user (username: admin, password: admin)");
+      const passwordHash = await hash(ADMIN_PASSWORD, 12);
+      client.prepare("INSERT INTO users (username, password_hash) VALUES (?, ?)").run(ADMIN_USERNAME, passwordHash);
+      console.log(`Created admin user (username: ${ADMIN_USERNAME})`);
     }
 
     const catResult = client.prepare("SELECT COUNT(*) as count FROM categories").get() as { count: number };

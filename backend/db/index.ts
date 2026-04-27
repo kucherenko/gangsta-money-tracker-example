@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 
-const DB_PATH = import.meta.dir + "/data.sqlite";
+const DB_PATH = process.env.DB_PATH || import.meta.dir + "/data.sqlite";
 
 // Open SQLite database file
 export const client = new Database(DB_PATH, { create: true });
@@ -91,8 +91,41 @@ export function initDb() {
   // Step 5: Create default settings row if missing
   ensureSettingsRow();
 
-  // Step 6: Migrate currencies table (add sort_order if missing)
-  migrateCurrenciesTable();
+  // Step 7: Remove legacy reverse-only rate pairs (created by old Frankfurter fetcher)
+  // which stored both USD->EUR and EUR->USD explicitly and shadow proper reverse lookups
+  // Also recalc old multi-currency transactions created with incorrect (inverted) rates
+  migrateExchangeRates();
+}
+
+function migrateExchangeRates() {
+  const cols = getTableColumns("exchange_rates");
+  if (!cols.includes("updated_at")) return;
+
+  // Clean up old reverse-only pairs for known legacy sources so that getRate()
+  // reverse inversion works correctly off only base->target rows.
+  // Legacy rows inserted by old code with source='frankfurter' that are reverse
+  // direction of newer 'fawaz' base->target rows cause shadowing.
+  // Since we cannot reliably tell which rows are reverse-only in the old data,
+  // we drop ALL legacy source='frankfurter' rows because the new fetcher
+  // only stores 'fawaz' and 'coingecko'.
+  client.exec("DELETE FROM exchange_rates WHERE source = 'frankfurter'");
+
+  // Recalculate any multi-currency transactions where exchange_rate looks like
+  // an old inverted value (< 1 while currency is weaker than default).
+  // Recompute rate = amount_default / amount for all non-default-currency transactions.
+  const settings = getOne("SELECT * FROM settings LIMIT 1") as any;
+  const defaultCurrency = settings?.default_currency || "USD";
+  const txs = client.prepare(
+    "SELECT id, amount, amount_default, currency, exchange_rate FROM transactions WHERE currency != ?"
+  ).all(defaultCurrency) as any[];
+  for (const tx of txs) {
+    if (!tx.amount || tx.amount === 0) continue;
+    const correctRate = (tx.amount_default ?? tx.amount) / tx.amount;
+    if (correctRate !== tx.exchange_rate) {
+      client.prepare("UPDATE transactions SET exchange_rate = ? WHERE id = ?")
+        .run(correctRate, tx.id);
+    }
+  }
 }
 
 // Migration helpers

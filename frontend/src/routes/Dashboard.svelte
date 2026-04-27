@@ -54,7 +54,9 @@
 
   function getRateForCurrency(code: string): { rate: number; source: string; age: string } | null {
     const defaultCurrency = settings.data?.defaultCurrency || "USD";
-    const rateInfo = rates.getRate(defaultCurrency, code);
+    // We want rate FROM the non-default currency TO default so we can show
+    // "1 CODE = DEFAULT <rate>"
+    const rateInfo = rates.getRate(code, defaultCurrency);
     if (!rateInfo) return null;
     return {
       rate: rateInfo.rate,
@@ -109,7 +111,7 @@
                 </div>
                 {#if rateData}
                   <span class="text-xs text-gray-400">
-                    {rateData.source === 'frankfurter' ? 'frankfurter.app' : 'CoinGecko'} • {rateData.age}
+                    {rateData.source === 'fawaz' ? 'fawazahmed0' : rateData.source} • {rateData.age}
                   </span>
                 {/if}
               </div>

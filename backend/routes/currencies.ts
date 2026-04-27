@@ -210,6 +210,22 @@ currencies.put("/:code", async (c) => {
   return c.json(transformCurrency(result));
 });
 
+currencies.delete("/:code", async (c) => {
+  const code = c.req.param("code");
+
+  const item = getOne("SELECT * FROM currencies WHERE code = ?", [code]);
+  if (!item) throw new HTTPException(404, { message: "Currency not found" });
+
+  // Prevent deletion if currency is referenced by any transactions
+  const txCount = getOne("SELECT COUNT(*) as count FROM transactions WHERE currency = ?", [code]);
+  if (txCount && txCount.count > 0) {
+    throw new HTTPException(409, { message: `Cannot delete: ${txCount.count} transaction(s) use this currency` });
+  }
+
+  run("DELETE FROM currencies WHERE code = ?", [code]);
+  return c.json({ success: true });
+});
+
 function transformCurrency(row: any) {
   return {
     id: row.id,

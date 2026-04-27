@@ -7,7 +7,8 @@
   "exports": {
     ".": "./index.ts",
     "./schemas": "./schemas.ts",
-    "./currencyData": "./currencyData.ts"
+    "./currencyData": "./currencyData.ts",
+    "./receipts": "./receipts.ts"
   },
   "dependencies": {
     "zod": "latest"

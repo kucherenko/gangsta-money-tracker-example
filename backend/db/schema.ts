@@ -38,7 +38,7 @@ export const exchangeRates = sqliteTable("exchange_rates", {
   targetCurrency: text("target_currency").notNull(),
   rate: real("rate").notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
-  source: text("source", { enum: ["frankfurter", "coingecko"] }).notNull(),
+  source: text("source", { enum: ["fawaz"] }).notNull(),
 }, (table) => ({
   uniquePair: table.baseCurrency.append(table.targetCurrency).unique(),
 }));
