@@ -4,7 +4,7 @@ import { testClient } from "hono/testing";
 import { describe, it, expect, beforeAll } from "bun:test";
 import { client, seedCurrencies } from "../db";
 import { seed } from "../db/seed";
-import app from "../server";
+import { app } from "../server";
 
 const testApp = testClient(app);
 

@@ -80,24 +80,16 @@ const stopTempCleanup = startTempCleanupScheduler();
 
 const port = process.env.PORT ? Number(process.env.PORT) : 3001;
 
-// Export Hono app for tests
-export default app;
+// Named export for tests (Hono testClient needs the app object directly)
+export { app };
+export type App = typeof app;
 
-// Server config for manual start
-export const serverConfig = {
+// Default export is the server config — Bun auto-serves this when the file is
+// run directly (bun run server.ts). Exporting as default avoids a second explicit
+// Bun.serve call that would cause EADDRINUSE on every startup.
+export default {
   port,
   fetch: app.fetch,
   hostname: "0.0.0.0",
+  reusePort: true,
 };
-
-// Auto-start when directly running (not imported as module)
-const isMain = import.meta.main ?? false;
-if (isMain) {
-  Bun.serve({
-    ...serverConfig,
-    reusePort: true,
-  });
-  console.log(`Server starting on port ${port} (reusePort: true)`);
-}
-
-export type App = typeof app;
