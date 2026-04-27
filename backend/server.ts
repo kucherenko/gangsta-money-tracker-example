@@ -93,8 +93,11 @@ export const serverConfig = {
 // Auto-start when directly running (not imported as module)
 const isMain = import.meta.main ?? false;
 if (isMain) {
-  Bun.serve(serverConfig);
-  console.log(`Server starting on port ${port}`);
+  Bun.serve({
+    ...serverConfig,
+    reusePort: true,
+  });
+  console.log(`Server starting on port ${port} (reusePort: true)`);
 }
 
 export type App = typeof app;
