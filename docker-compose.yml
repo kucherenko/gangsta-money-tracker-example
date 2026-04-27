@@ -1,41 +1,15 @@
 name: money
 
 services:
-  # ─── Ollama (receipt OCR backend) ────────────────────
   ollama:
-    image: ollama/ollama:latest
-    container_name: money-ollama
+    image: ollama/ollama:${OLLAMA_DOCKER_TAG:-latest}
+    container_name: ollama
+    pull_policy: always
+    tty: true
     restart: unless-stopped
-    ports:
-      - "${OLLAMA_PORT:-11434}:11434"
     volumes:
-      - ollama-data:/root/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-    networks:
-      - money
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:11434/api/tags"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-    deploy:
-      resources:
-        limits:
-          memory: 8G
-        reservations:
-          memory: 2G
-    # If you need GPU support on Linux, uncomment the lines below:
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+      - ollama:/root/.ollama
 
-  # ─── Backend (API + Static SPA) ─────────────────────
   backend:
     build:
       context: .
@@ -46,21 +20,31 @@ services:
     restart: unless-stopped
     ports:
       - "${APP_PORT:-3001}:3001"
-    env_file:
-      - .env
     environment:
-      - NODE_ENV=production
-      - PORT=3001
-      - STATIC_DIR=/app/frontend/dist
+      # General
+      - NODE_ENV=${NODE_ENV}
+      - PORT=${PORT}
+      # Admin Credentials (change in production)
+      - ADMIN_USERNAME=${ADMIN_USERNAME}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      # Security
+      - JWT_SECRET=${JWT_SECRET}
+      # Database
       - DB_PATH=/app/backend/db/data.sqlite
+      # External APIs
+      - RATE_API_URL=${RATE_API_URL}
+      # Ollama (receipt OCR)
+      - OLLAMA_HOST=${OLLAMA_HOST}
+      - OLLAMA_MODEL=${OLLAMA_MODEL}
+      # Frontend Static Files
+      - STATIC_DIR=/app/frontend/dist
     depends_on:
-      ollama:
-        condition: service_healthy
+      - ollama
+    extra_hosts:
+      - host.docker.internal:host-gateway
     volumes:
       - app-data:/app/backend/db
       - receipt-temp:/app/backend/data/temp_receipts
-    networks:
-      - money
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:3001/health"]
       interval: 15s
@@ -70,7 +54,7 @@ services:
       resources:
         limits:
           memory: 512M
-          cpus: '1.0'
+          cpus: "1.0"
         reservations:
           memory: 128M
     logging:
@@ -80,14 +64,6 @@ services:
         max-file: "3"
 
 volumes:
-  ollama-data:
-    driver: local
-  app-data:
-    driver: local
-  receipt-temp:
-    driver: local
-
-networks:
-  money:
-    driver: bridge
-    name: money
+  ollama: {}
+  app-data: {}
+  receipt-temp: {}
