@@ -54,6 +54,4 @@ temp/
 *.tmp
 .cache/
 
-# Data files (already tracked but should be ignored going forward)
-# backend/db/data.sqlite*
-# Uncomment above if you want to stop tracking DB files entirely
+
