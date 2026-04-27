@@ -21,7 +21,7 @@ function validateEnv() {
   const isProduction = process.env.NODE_ENV === "production";
   const required: string[] = [];
   if (isProduction) {
-    required.push("JWT_SECRET", "OLLAMA_HOST", "OLLAMA_MODEL");
+    required.push("JWT_SECRET", "ADMIN_PASSWORD", "OLLAMA_HOST", "OLLAMA_MODEL");
   }
   for (const key of required) {
     if (!process.env[key]) {

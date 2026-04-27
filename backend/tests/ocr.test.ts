@@ -8,6 +8,9 @@ import { app } from "../server";
 
 const testApp = testClient(app);
 
+const TEST_ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
+const TEST_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin";
+
 let token: string;
 
 beforeAll(async () => {
@@ -25,7 +28,7 @@ beforeAll(async () => {
   await seed();
 
   const res = await testApp.auth.login.$post({
-    json: { username: "admin", password: "admin" },
+    json: { username: TEST_ADMIN_USERNAME, password: TEST_ADMIN_PASSWORD },
   });
   const body = await res.json();
   token = body.token;

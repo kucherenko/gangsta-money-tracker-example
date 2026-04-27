@@ -8,6 +8,9 @@ import { app } from "../server";
 
 const testApp = testClient(app);
 
+const TEST_ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
+const TEST_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin";
+
 // Shared token
 let token: string;
 
@@ -31,7 +34,7 @@ beforeAll(async () => {
   
   // Login
   const res = await testApp.auth.login.$post({
-    json: { username: "admin", password: "admin" },
+    json: { username: TEST_ADMIN_USERNAME, password: TEST_ADMIN_PASSWORD },
   });
   const body = await res.json();
   token = body.token;
@@ -50,7 +53,7 @@ describe("Multi-Currency Feature", () => {
   describe("Auth", () => {
     it("login with default credentials", async () => {
       const res = await testApp.auth.login.$post({
-        json: { username: "admin", password: "admin" },
+        json: { username: TEST_ADMIN_USERNAME, password: TEST_ADMIN_PASSWORD },
       });
       expect(res.status).toBe(200);
       const body = await res.json();
@@ -60,7 +63,7 @@ describe("Multi-Currency Feature", () => {
 
     it("rejects invalid credentials", async () => {
       const res = await testApp.auth.login.$post({
-        json: { username: "admin", password: "wrong" },
+        json: { username: TEST_ADMIN_USERNAME, password: "wrong" },
       });
       expect(res.status).toBe(401);
     });

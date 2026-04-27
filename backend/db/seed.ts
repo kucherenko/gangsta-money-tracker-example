@@ -1,5 +1,5 @@
 import { client, ensureSettingsRow } from "./index";
-import { hash } from "bcryptjs";
+import { hash, compare } from "bcryptjs";
 
 const DEFAULT_CATEGORIES = [
   { name: "Salary", color: "#22c55e", icon: "Wallet", type: "income", isPredefined: 1 },
@@ -19,11 +19,17 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin";
 
 export async function seed() {
   try {
-    const userResult = client.prepare("SELECT * FROM users WHERE username = ?").get(ADMIN_USERNAME);
+    const userResult = client.prepare("SELECT * FROM users WHERE username = ?").get(ADMIN_USERNAME) as { password_hash: string } | undefined;
+    const passwordHash = await hash(ADMIN_PASSWORD, 12);
     if (!userResult) {
-      const passwordHash = await hash(ADMIN_PASSWORD, 12);
       client.prepare("INSERT INTO users (username, password_hash) VALUES (?, ?)").run(ADMIN_USERNAME, passwordHash);
       console.log(`Created admin user (username: ${ADMIN_USERNAME})`);
+    } else {
+      const match = await compare(ADMIN_PASSWORD, userResult.password_hash);
+      if (!match) {
+        client.prepare("UPDATE users SET password_hash = ? WHERE username = ?").run(passwordHash, ADMIN_USERNAME);
+        console.log(`Updated admin password (username: ${ADMIN_USERNAME})`);
+      }
     }
 
     const catResult = client.prepare("SELECT COUNT(*) as count FROM categories").get() as { count: number };
