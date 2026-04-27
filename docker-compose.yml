@@ -22,22 +22,22 @@ services:
       - "${APP_PORT:-3001}:3001"
     environment:
       # General
-      - NODE_ENV=${NODE_ENV}
-      - PORT=${PORT}
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=${PORT:-3001}
       # Admin Credentials (change in production)
-      - ADMIN_USERNAME=${ADMIN_USERNAME}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
       # Security
-      - JWT_SECRET=${JWT_SECRET}
+      - JWT_SECRET=${JWT_SECRET:-money-tracker-secret-key}
       # Database
-      - DB_PATH=/app/backend/db/data.sqlite
+      - DB_PATH=${DB_PATH:-/app/backend/db/data.sqlite}
       # External APIs
-      - RATE_API_URL=${RATE_API_URL}
+      - RATE_API_URL=${RATE_API_URL:-https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies}
       # Ollama (receipt OCR)
-      - OLLAMA_HOST=${OLLAMA_HOST}
-      - OLLAMA_MODEL=${OLLAMA_MODEL}
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3-vl:235b-cloud}
       # Frontend Static Files
-      - STATIC_DIR=/app/frontend/dist
+      - STATIC_DIR=${STATIC_DIR:-/app/frontend/dist}
     depends_on:
       - ollama
     extra_hosts:
