@@ -1,15 +1,6 @@
 name: money
 
 services:
-  ollama:
-    image: ollama/ollama:${OLLAMA_DOCKER_TAG:-latest}
-    container_name: ollama
-    pull_policy: always
-    tty: true
-    restart: unless-stopped
-    volumes:
-      - ollama:/root/.ollama
-
   backend:
     build:
       context: .
