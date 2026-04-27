@@ -19,7 +19,7 @@ services:
     container_name: money-backend
     restart: unless-stopped
     ports:
-      - "${APP_PORT:-3001}:3001"
+      - "${APP_PORT:-3001}"
     environment:
       # General
       - NODE_ENV=${NODE_ENV:-development}
