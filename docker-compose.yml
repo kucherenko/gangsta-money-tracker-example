@@ -4,7 +4,7 @@ services:
   ollama:
     volumes:
       - ollama:/root/.ollama
-    container_name: ollama
+    container_name: money-ollama
     pull_policy: always
     tty: true
     restart: unless-stopped
@@ -36,7 +36,7 @@ services:
       # External APIs
       - RATE_API_URL=${RATE_API_URL:-https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies}
       # Ollama (receipt OCR)
-      - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama:11434}
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://money-ollama:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3-vl:235b-cloud}
       # Frontend Static Files
       - STATIC_DIR=${STATIC_DIR:-/app/frontend/dist}
