@@ -1,6 +1,15 @@
 name: money
 
 services:
+  ollama:
+    volumes:
+      - ollama:/root/.ollama
+    container_name: ollama
+    pull_policy: always
+    tty: true
+    restart: unless-stopped
+    image: ollama/ollama:${OLLAMA_DOCKER_TAG-latest}
+
   backend:
     build:
       context: .
@@ -9,6 +18,8 @@ services:
     image: money-backend:latest
     container_name: money-backend
     restart: unless-stopped
+    depends_on:
+      - ollama
     ports:
       - "${PORT:-3001}"
     environment:
@@ -55,3 +66,4 @@ services:
 volumes:
   app-data: {}
   receipt-temp: {}
+  ollama: {}
