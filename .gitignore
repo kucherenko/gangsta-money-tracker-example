@@ -54,4 +54,8 @@ temp/
 *.tmp
 .cache/
 
+# Temp receipts
+data/temp_receipts/
+backend/data/temp_receipts/
+
 
