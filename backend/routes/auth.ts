@@ -33,7 +33,7 @@ auth.post("/login", rateLimit({ windowMs: 15 * 60 * 1000, max: 10 }), async (c) 
 
   const { accessToken, refreshToken } = await generateTokenPair(user.id, user.role);
 
-  return c.json({ token: accessToken, refreshToken });
+  return c.json({ token: accessToken, refreshToken, user: { id: user.id, username: user.username, role: user.role, email: user.email } });
 });
 
 auth.post("/register", rateLimit({ windowMs: 60 * 60 * 1000, max: 5 }), async (c) => {
