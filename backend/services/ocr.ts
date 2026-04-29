@@ -93,21 +93,18 @@ function computeConfidence(result: ReceiptExtract, currencies: string[]) {
 
 export class OllamaOcrService implements OcrService {
   constructor(
-    private model: string = process.env.OLLAMA_MODEL!,
-    private baseUrl: string = process.env.OLLAMA_HOST!
+    private model: string = process.env.OLLAMA_MODEL || "",
+    private baseUrl: string = process.env.OLLAMA_HOST || ""
   ) {
-    if (!this.model) {
-      throw new Error("OLLAMA_MODEL environment variable is required");
-    }
-    if (!this.baseUrl) {
-      throw new Error("OLLAMA_HOST environment variable is required");
-    }
   }
 
   async extractReceipt(
     filePath: string,
     options?: { categories?: string[]; currencies?: string[] }
   ): Promise<ReceiptExtract> {
+    if (!this.model || !this.baseUrl) {
+      throw new Error("OCR is not configured. Set OLLAMA_HOST and OLLAMA_MODEL environment variables.");
+    }
     const imageBuffer = await Bun.file(filePath).arrayBuffer();
     const base64 = Buffer.from(imageBuffer).toString("base64");
 
@@ -135,6 +132,9 @@ Return ONLY raw JSON — no markdown code fences, no explanations. Example:
     url: string,
     options?: { categories?: string[]; currencies?: string[]; pageText?: string }
   ): Promise<ReceiptExtract> {
+    if (!this.model || !this.baseUrl) {
+      throw new Error("OCR is not configured. Set OLLAMA_HOST and OLLAMA_MODEL environment variables.");
+    }
     const categories = buildCategories(options);
     const currencies = buildCurrencies(options);
 
