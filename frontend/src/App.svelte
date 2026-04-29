@@ -5,6 +5,7 @@
   import Transactions from "./routes/Transactions.svelte";
   import TransactionForm from "./routes/TransactionForm.svelte";
   import Settings from "./routes/Settings.svelte";
+  import Admin from "./routes/Admin.svelte";
   import Setup from "./routes/Setup.svelte";
   import OfflineNotice from "./components/OfflineNotice.svelte";
   import { auth } from "./state/auth.svelte";
@@ -53,6 +54,9 @@
         <a href="#/dashboard" class="text-sm text-gray-600 hover:text-gray-900" onclick={(e: Event) => { e.preventDefault(); navigate("/dashboard"); }}>Dashboard</a>
         <a href="#/transactions" class="text-sm text-gray-600 hover:text-gray-900" onclick={(e: Event) => { e.preventDefault(); navigate("/transactions"); }}>Transactions</a>
         <a href="#/settings" class="text-sm text-gray-600 hover:text-gray-900" onclick={(e: Event) => { e.preventDefault(); navigate("/settings"); }}>Settings</a>
+        {#if auth.user?.role === 'admin'}
+          <a href="#/admin" class="text-sm text-blue-600 hover:text-blue-800 font-medium" onclick={(e: Event) => { e.preventDefault(); navigate("/admin"); }}>Admin</a>
+        {/if}
         <span class="text-xs text-gray-500 border-l border-gray-200 pl-4">
           {auth.user?.username || "User"}
           {#if auth.user?.role === 'admin'}
@@ -82,6 +86,8 @@
     <TransactionForm />
   {:else if route === "#/settings"}
     <Settings />
+  {:else if route === "#/admin" && auth.user?.role === 'admin'}
+    <Admin />
   {:else}
     <Dashboard />
   {/if}

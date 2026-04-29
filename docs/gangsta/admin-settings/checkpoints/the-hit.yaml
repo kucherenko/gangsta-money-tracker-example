@@ -1,0 +1,40 @@
+---
+heist: admin-settings
+phase: the-hit
+status: completed
+timestamp: 2026-04-29T01:30:00Z
+next-action: Proceed to Laundering
+completed-wps:
+  - WP-001
+  - WP-002
+  - WP-003
+  - WP-004
+  - WP-005
+  - WP-006
+  - WP-007
+  - WP-008
+  - WP-009
+  - WP-010
+  - WP-011
+  - WP-012
+  - WP-013
+  - WP-014
+pending-wps: []
+failed-wps: []
+artifacts:
+  - backend/db/schema.ts
+  - backend/db/index.ts
+  - backend/lib/config-constants.ts
+  - backend/routes/admin.ts
+  - backend/routes/auth.ts
+  - backend/server.ts
+  - shared/schemas.ts
+  - shared/index.ts
+  - frontend/src/routes/Admin.svelte
+  - frontend/src/state/admin.svelte.ts
+  - frontend/src/state/settings.svelte.ts
+  - frontend/src/lib/api.ts
+  - frontend/src/App.svelte
+  - frontend/src/routes/Settings.svelte
+  - backend/tests/admin.test.ts
+---

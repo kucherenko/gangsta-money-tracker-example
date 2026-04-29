@@ -1,0 +1,9 @@
+---
+heist: admin-settings
+phase: the-sit-down
+status: completed
+timestamp: 2026-04-29T00:30:00Z
+next-action: Proceed to Resource Development
+artifacts:
+  - docs/gangsta/admin-settings/specs/2026-04-29-contract.md
+---

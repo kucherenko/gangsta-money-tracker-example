@@ -10,17 +10,31 @@ export class SettingsState {
     showCryptoOnDashboard: true,
   });
   currencies = $state<any[]>([]);
+  allowRegistration = $state<boolean>(false);
 
   async load() {
     try {
       this.data = await api.getSettings();
-      // Load ALL currencies including archived ones
       this.currencies = await api.getCurrencies(undefined, true);
-      // Sort by sortOrder DESC (higher = first)
       this.currencies.sort((a: any, b: any) => (b.sortOrder || 0) - (a.sortOrder || 0));
+      await this.loadRegistrationStatus();
     } catch (err) {
       console.error("Failed to load settings:", err);
     }
+  }
+
+  async loadRegistrationStatus() {
+    try {
+      const config = await api.getConfig();
+      this.allowRegistration = config.allow_registration === "true";
+    } catch (err) {
+      console.error("Failed to load registration status:", err);
+    }
+  }
+
+  async toggleRegistration(value: boolean) {
+    await api.updateConfig("allow_registration", String(value));
+    this.allowRegistration = value;
   }
 
   async update(data: any) {
