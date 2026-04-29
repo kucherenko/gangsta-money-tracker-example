@@ -2,7 +2,6 @@
   import { categories } from "../state/categories.svelte";
   import { settings } from "../state/settings.svelte";
   import { api } from "../lib/api";
-  import { auth } from "../state/auth.svelte";
   import { onMount } from "svelte";
   import {
     getCurrencyEmoji,
@@ -11,82 +10,17 @@
     COMMON_CRYPTOS,
   } from "@money-tracker/shared/currencyData";
 
-  let isAdmin = $derived(auth.user?.role === "admin");
-
   onMount(() => {
     categories.load();
     settings.load();
-    if (isAdmin) loadAdminData();
   });
 
-  // ─── Tabs ────────────────────────────────────────────────────────────────
-  let activeTab = $state<"general" | "currencies" | "categories" | "admin">("general");
-  $effect(() => {
-    const allTabs: { key: typeof activeTab; label: string }[] = [
-      { key: "general", label: "General" },
-      { key: "currencies", label: "Currencies" },
-      { key: "categories", label: "Categories" },
-    ];
-    if (isAdmin) {
-      allTabs.push({ key: "admin", label: "Admin" });
-    }
-    tabs = allTabs;
-  });
+  let activeTab = $state<"general" | "currencies" | "categories">("general");
   let tabs: { key: typeof activeTab; label: string }[] = [
     { key: "general", label: "General" },
     { key: "currencies", label: "Currencies" },
     { key: "categories", label: "Categories" },
   ];
-
-  // ─── Admin state ──────────────────────────────────────────────────────────
-  let adminUsers = $state<any[]>([]);
-  let allowRegistration = $state(false);
-  let newUserUsername = $state("");
-  let newUserPassword = $state("");
-  let newUserEmail = $state("");
-  let newUserRole = $state<"user" | "admin">("user");
-  let showUserForm = $state(false);
-
-  async function loadAdminData() {
-    try {
-      [adminUsers, config] = await Promise.all([api.getUsers(), api.getConfig()]);
-      allowRegistration = config.allowRegistration === "true";
-    } catch {}
-  }
-
-  let config: any = {};
-
-  async function toggleRegistration() {
-    const newVal = !allowRegistration;
-    try {
-      await api.updateConfig("allow_registration", String(newVal));
-      allowRegistration = newVal;
-    } catch (err: any) {
-      setError("admin", err.message);
-    }
-  }
-
-  async function handleCreateUser(e: SubmitEvent) {
-    e.preventDefault();
-    try {
-      await api.createUser({ username: newUserUsername, password: newUserPassword, email: newUserEmail || undefined, role: newUserRole });
-      newUserUsername = ""; newUserPassword = ""; newUserEmail = ""; newUserRole = "user";
-      showUserForm = false;
-      await loadAdminData();
-    } catch (err: any) {
-      setError("admin", err.message);
-    }
-  }
-
-  async function handleDeleteUser(id: number, username: string) {
-    if (!confirm(`Delete user "${username}" and all their data? This cannot be undone.`)) return;
-    try {
-      await api.deleteUser(id);
-      await loadAdminData();
-    } catch (err: any) {
-      setError("admin", err.message);
-    }
-  }
 
   // ─── Errors ─────────────────────────────────────────────────────────────────
   let errors = $state<Record<string, string>>({});
@@ -740,111 +674,6 @@
             </div>
           </div>
         {/each}
-      </div>
-    </div>
-  {/if}
-
-  <!-- ═══ ADMIN TAB ══════════════════════════════════════════════════════════ -->
-  {#if activeTab === "admin" && isAdmin}
-    <div class="space-y-6">
-      {#if errors.admin}
-        <div class="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{errors.admin}</div>
-      {/if}
-
-      <!-- Registration toggle -->
-      <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <h2 class="text-lg font-semibold text-gray-900 mb-4">Registration</h2>
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm text-gray-700">Allow new user registration</p>
-            <p class="text-xs text-gray-500">When enabled, anyone can create an account from the login page.</p>
-          </div>
-          <button onclick={toggleRegistration}
-            class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out {allowRegistration ? 'bg-blue-500' : 'bg-gray-300'}"
-            role="switch" aria-checked={allowRegistration}>
-            <span class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {allowRegistration ? 'translate-x-5' : 'translate-x-0.5'}"></span>
-          </button>
-        </div>
-      </div>
-
-      <!-- User management -->
-      <div class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-semibold text-gray-900">Users</h2>
-          <button onclick={() => showUserForm = !showUserForm}
-            class="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50">
-            {showUserForm ? "Cancel" : "+ Create User"}
-          </button>
-        </div>
-
-        {#if showUserForm}
-          <form onsubmit={handleCreateUser} class="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
-                <input type="text" bind:value={newUserUsername} required minlength="3" maxlength="30" pattern="[a-zA-Z0-9_]+"
-                  class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="3-30 chars" />
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                <input type="password" bind:value={newUserPassword} required minlength="8" maxlength="128"
-                  class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="8+ characters" />
-              </div>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Email (optional)</label>
-                <input type="email" bind:value={newUserEmail}
-                  class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="user@example.com" />
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                <select bind:value={newUserRole} class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-            </div>
-            <button type="submit" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
-              Create User
-            </button>
-          </form>
-        {/if}
-
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-3 py-2 text-left font-medium text-gray-500">ID</th>
-                <th class="px-3 py-2 text-left font-medium text-gray-500">Username</th>
-                <th class="px-3 py-2 text-left font-medium text-gray-500">Email</th>
-                <th class="px-3 py-2 text-left font-medium text-gray-500">Role</th>
-                <th class="px-3 py-2 text-left font-medium text-gray-500">Actions</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
-              {#each adminUsers as u (u.id)}
-                <tr class="hover:bg-slate-50">
-                  <td class="px-3 py-2 text-gray-500">{u.id}</td>
-                  <td class="px-3 py-2 font-medium">{u.username}</td>
-                  <td class="px-3 py-2 text-gray-500">{u.email || "\u2014"}</td>
-                  <td class="px-3 py-2">
-                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs {u.role === 'admin' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-600'}">
-                      {u.role}
-                    </span>
-                  </td>
-                  <td class="px-3 py-2">
-                    {#if u.id !== auth.user?.id}
-                      <button onclick={() => handleDeleteUser(u.id, u.username)} class="text-xs text-red-600 hover:text-red-800">Delete</button>
-                    {:else}
-                      <span class="text-xs text-gray-400">Current user</span>
-                    {/if}
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
       </div>
     </div>
   {/if}

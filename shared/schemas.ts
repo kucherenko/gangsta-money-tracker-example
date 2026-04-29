@@ -238,3 +238,25 @@ export const apiErrorSchema = z.object({
   error: z.string(),
   details: z.array(z.string()).optional(),
 });
+
+// ─── Admin ────────────────────────────────────────────────────────────────────
+
+export const cleanupTokenRequestSchema = z.object({
+  scope: z.enum(["transactions", "orphaned"]),
+});
+
+export const cleanupExecuteSchema = z.object({
+  token: z.string().min(1),
+  scope: z.enum(["transactions", "orphaned"]),
+});
+
+export const adminStatsSchema = z.object({
+  users: z.number().int(),
+  transactions: z.number().int(),
+  categories: z.number().int(),
+  exchange_rates: z.number().int(),
+});
+
+export type CleanupTokenRequest = z.infer<typeof cleanupTokenRequestSchema>;
+export type CleanupExecute = z.infer<typeof cleanupExecuteSchema>;
+export type AdminStats = z.infer<typeof adminStatsSchema>;

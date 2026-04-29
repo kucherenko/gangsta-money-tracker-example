@@ -4,6 +4,7 @@ import { loggerMiddleware } from "./middleware/logger";
 import { errorHandler } from "./middleware/errorHandler";
 import { initDb, migrateReceiptFiles, getOne } from "./db";
 import { JWT_SECRET } from "./config";
+import { CONFIG_KEYS } from "./lib/config-constants";
 import { seed } from "./db/seed";
 import authRoutes from "./routes/auth";
 import adminRoutes from "./routes/admin";
@@ -60,7 +61,7 @@ app.route("/rates", ratesRoutes);
 app.get("/health", (c) => c.json({ status: "ok" }));
 
 app.get("/auth/config/register", (c) => {
-  const regConfig = getOne("SELECT value FROM system_config WHERE key = 'allow_registration'") as any;
+  const regConfig = getOne(`SELECT value FROM system_config WHERE key = '${CONFIG_KEYS.ALLOW_REGISTRATION}'`) as any;
   const adminCount = getOne("SELECT COUNT(*) as count FROM users WHERE role = 'admin'") as { count: number };
   return c.json({ allowRegistration: regConfig?.value === "true" && adminCount.count > 0, needsSetup: adminCount.count === 0 });
 });

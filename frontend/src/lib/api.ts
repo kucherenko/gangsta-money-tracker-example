@@ -202,10 +202,17 @@ export const api = {
 
   // Admin
   getUsers: () => fetchJson("/admin/users"),
+  getUsersPaginated: (page: number, limit: number) => fetchJson(`/admin/users?page=${page}&limit=${limit}`),
   createUser: (data: { username: string; password: string; email?: string; role?: string }) => fetchJson("/admin/users", { method: "POST", body: JSON.stringify(data) }),
   deleteUser: (id: number) => fetchJson(`/admin/users/${id}`, { method: "DELETE" }),
   getConfig: () => fetchJson("/admin/config"),
   updateConfig: (key: string, value: string) => fetchJson(`/admin/config/${key}`, { method: "PUT", body: JSON.stringify({ value }) }),
+
+  // Admin stats & cleanup
+  getAdminStats: () => fetchJson("/admin/stats"),
+  requestCleanupToken: (scope: string) => fetchJson("/admin/cleanup/token", { method: "POST", body: JSON.stringify({ scope }) }),
+  executeCleanup: (token: string, scope: string) => fetchJson("/admin/cleanup", { method: "POST", body: JSON.stringify({ token, scope }) }),
+  getAdminAudit: () => fetchJson("/admin/audit"),
 
   setTokens(ac: string, rc: string) {
     setTokens(ac, rc);

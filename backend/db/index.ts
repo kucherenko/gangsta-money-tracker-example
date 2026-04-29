@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { CONFIG_KEYS } from "../lib/config-constants";
 
 const DB_PATH = process.env.DB_PATH || import.meta.dir + "/data.sqlite";
 
@@ -86,6 +87,26 @@ export function initDb() {
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       created_at INTEGER DEFAULT (unixepoch())
     );
+
+    CREATE TABLE IF NOT EXISTS cleanup_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash TEXT NOT NULL UNIQUE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      scope TEXT NOT NULL CHECK(scope IN ('transactions', 'orphaned')),
+      consumed INTEGER NOT NULL DEFAULT 0,
+      expires_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      performed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      action TEXT NOT NULL,
+      scope TEXT,
+      details TEXT,
+      ip_address TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
   `);
 
   // Step 2: Run migrations
@@ -96,6 +117,8 @@ export function initDb() {
   migrateRefreshTokensTable();
   seedSystemConfig();
   cleanOrphanedData();
+  migrateCleanupTokens();
+  migrateAuditLog();
 
   // Step 3: Enable pragmas (after orphan cleanup)
   client.exec("PRAGMA foreign_keys = ON;");
@@ -113,6 +136,9 @@ export function initDb() {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name_type_user ON categories(name, type, COALESCE(user_id, -1));
     CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_refresh_tokens_token_hash ON refresh_tokens(token_hash);
+    CREATE INDEX IF NOT EXISTS idx_cleanup_tokens_user_id ON cleanup_tokens(user_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_performed_by ON audit_log(performed_by);
+    CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at);
   `);
 
   // Step 5: Seed currencies (no user dependency)
@@ -199,13 +225,50 @@ function migrateSettingsTable() {
 }
 
 function seedSystemConfig() {
-  client.exec("INSERT OR IGNORE INTO system_config (key, value) VALUES ('allow_registration', 'false')");
+  client.exec(`INSERT OR IGNORE INTO system_config (key, value) VALUES ('${CONFIG_KEYS.ALLOW_REGISTRATION}', 'false')`);
 }
 
 function migrateRefreshTokensTable() {
   const columns = getTableColumns("refresh_tokens");
   if (!columns.includes("consumed")) {
     client.exec("ALTER TABLE refresh_tokens ADD COLUMN consumed INTEGER NOT NULL DEFAULT 0");
+  }
+}
+
+function migrateCleanupTokens() {
+  const cols = getTableColumns("cleanup_tokens");
+  if (cols.length === 0) {
+    client.exec(`
+      CREATE TABLE IF NOT EXISTS cleanup_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        token_hash TEXT NOT NULL UNIQUE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        scope TEXT NOT NULL CHECK(scope IN ('transactions', 'orphaned')),
+        consumed INTEGER NOT NULL DEFAULT 0,
+        expires_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      CREATE INDEX IF NOT EXISTS idx_cleanup_tokens_user_id ON cleanup_tokens(user_id);
+    `);
+  }
+}
+
+function migrateAuditLog() {
+  const cols = getTableColumns("audit_log");
+  if (cols.length === 0) {
+    client.exec(`
+      CREATE TABLE IF NOT EXISTS audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        performed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        action TEXT NOT NULL,
+        scope TEXT,
+        details TEXT,
+        ip_address TEXT,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      CREATE INDEX IF NOT EXISTS idx_audit_log_performed_by ON audit_log(performed_by);
+      CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at);
+    `);
   }
 }
 

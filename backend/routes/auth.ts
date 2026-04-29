@@ -8,6 +8,7 @@ import { JWT_SECRET, ACCESS_TOKEN_EXPIRY, REFRESH_TOKEN_EXPIRY_DAYS } from "../c
 import { authMiddleware, adminMiddleware } from "../middleware/auth";
 import { rateLimit } from "../middleware/rateLimit";
 import { generateTokenPair, generateTokenPairSync, hashToken } from "../lib/tokens";
+import { CONFIG_KEYS } from "../lib/config-constants";
 
 import { formatZodError } from "../lib/utils";
 
@@ -37,7 +38,7 @@ auth.post("/login", rateLimit({ windowMs: 15 * 60 * 1000, max: 10 }), async (c) 
 });
 
 auth.post("/register", rateLimit({ windowMs: 60 * 60 * 1000, max: 5 }), async (c) => {
-  const regConfig = getOne("SELECT value FROM system_config WHERE key = 'allow_registration'") as any;
+  const regConfig = getOne(`SELECT value FROM system_config WHERE key = '${CONFIG_KEYS.ALLOW_REGISTRATION}'`) as any;
   if (!regConfig || regConfig.value !== "true") {
     throw new HTTPException(403, { message: "Registration is currently disabled" });
   }

@@ -86,6 +86,28 @@ export const transactions = sqliteTable("transactions", {
   createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
 });
 
+// ─── Cleanup Tokens ───────────────────────────────────────────────────────────
+export const cleanupTokens = sqliteTable("cleanup_tokens", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tokenHash: text("token_hash").notNull().unique(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  scope: text("scope", { enum: ["transactions", "orphaned"] }).notNull(),
+  consumed: integer("consumed").notNull().default(0),
+  expiresAt: integer("expires_at").notNull(),
+  createdAt: integer("created_at").notNull().default(new Date()),
+});
+
+// ─── Audit Log ────────────────────────────────────────────────────────────────
+export const auditLog = sqliteTable("audit_log", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  performedBy: integer("performed_by").references(() => users.id, { onDelete: "set null" }),
+  action: text("action").notNull(),
+  scope: text("scope"),
+  details: text("details"),
+  ipAddress: text("ip_address"),
+  createdAt: integer("created_at").notNull().default(new Date()),
+});
+
 // ─── Relations ──────────────────────────────────────────────────────────────
 export const transactionsRelations = relations(transactions, ({ one }) => ({
   category: one(categories, {
