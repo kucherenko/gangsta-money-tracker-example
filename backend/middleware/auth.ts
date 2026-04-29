@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from "hono";
-import { getOne } from "../db";
+import { verify } from "hono/jwt";
+import { JWT_SECRET } from "../config";
 
 export const authMiddleware: MiddlewareHandler = async (c, next) => {
   const authHeader = c.req.header("Authorization");
@@ -9,13 +10,21 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
 
   const token = authHeader.slice(7);
 
-  // Verify token exists in DB (simplified v1 - direct comparison)
-  const user = getOne("SELECT * FROM users WHERE token = ?", [token]);
-  if (!user) {
-    return c.json({ error: "Invalid token" }, 401);
+  try {
+    const payload = await verify(token, JWT_SECRET, "HS256") as any;
+    c.set("userId", payload.sub as number);
+    c.set("role", payload.role as string);
+  } catch {
+    return c.json({ error: "Invalid or expired token" }, 401);
   }
 
-  c.set("userId", user.id);
-  c.set("user", user);
+  await next();
+};
+
+export const adminMiddleware: MiddlewareHandler = async (c, next) => {
+  const role = c.get("role");
+  if (role !== "admin") {
+    return c.json({ error: "Admin access required" }, 403);
+  }
   await next();
 };

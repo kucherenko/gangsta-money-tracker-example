@@ -6,7 +6,17 @@ export const users = sqliteTable("users", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   username: text("username").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
-  token: text("token"),
+  email: text("email"),
+  role: text("role").notNull().default("user"),
+});
+
+// ─── Refresh Tokens ───────────────────────────────────────────────────────────
+export const refreshTokens = sqliteTable("refresh_tokens", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  tokenHash: text("token_hash").notNull().unique(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
 });
 
 // ─── Categories ───────────────────────────────────────────────────────────────
@@ -17,6 +27,7 @@ export const categories = sqliteTable("categories", {
   icon: text("icon"),
   type: text("type", { enum: ["income", "expense"] }).notNull(),
   isPredefined: integer("is_predefined", { mode: "boolean" }).notNull().default(false),
+  userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }),
 });
 
 // ─── Currencies ──────────────────────────────────────────────────────────────
@@ -46,12 +57,18 @@ export const exchangeRates = sqliteTable("exchange_rates", {
 // ─── Settings ─────────────────────────────────────────────────────────────────
 export const settings = sqliteTable("settings", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  userId: integer("user_id").references(() => users.id),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   defaultCurrency: text("default_currency").notNull().default("USD"),
   fiatFetchInterval: integer("fiat_fetch_interval").notNull().default(60),
   cryptoFetchInterval: integer("crypto_fetch_interval").notNull().default(5),
   autoFetchRates: integer("auto_fetch_rates", { mode: "boolean" }).notNull().default(true),
   showCryptoOnDashboard: integer("show_crypto_on_dashboard", { mode: "boolean" }).notNull().default(true),
+});
+
+// ─── System Config ────────────────────────────────────────────────────────────
+export const systemConfig = sqliteTable("system_config", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
 });
 
 // ─── Transactions ─────────────────────────────────────────────────────────────
@@ -62,9 +79,10 @@ export const transactions = sqliteTable("transactions", {
   amountDefault: integer("amount_default"),
   exchangeRate: real("exchange_rate"),
   description: text("description"),
-  date: text("date").notNull(), // YYYY-MM-DD
+  date: text("date").notNull(),
   type: text("type", { enum: ["income", "expense"] }).notNull(),
   categoryId: integer("category_id").references(() => categories.id),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
 });
 
@@ -73,6 +91,10 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
   category: one(categories, {
     fields: [transactions.categoryId],
     references: [categories.id],
+  }),
+  user: one(users, {
+    fields: [transactions.userId],
+    references: [users.id],
   }),
 }));
 
@@ -84,7 +106,19 @@ export const currenciesRelations = relations(currencies, ({ many }) => ({
   transactions: many(transactions),
 }));
 
-// ─── Categories ───────────────────────────────────────────────────────────────
+export const usersRelations = relations(users, ({ many }) => ({
+  refreshTokens: many(refreshTokens),
+  settings: many(settings),
+}));
+
+export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [refreshTokens.userId],
+    references: [users.id],
+  }),
+}));
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 export type UserType = typeof users.$inferSelect;
 export type InsertUserType = typeof users.$inferInsert;
 export type CategoryType = typeof categories.$inferSelect;

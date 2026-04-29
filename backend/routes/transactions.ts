@@ -3,33 +3,47 @@ import { HTTPException } from "hono/http-exception";
 import { authMiddleware } from "../middleware/auth";
 import { query, getOne, run, lastInsertedRow } from "../db";
 import { insertTransactionSchema, updateTransactionSchema } from "@money-tracker/shared/schemas";
-import { mkdirSync, renameSync } from "node:fs";
+import { formatZodError } from "../lib/utils";
+import { mkdirSync, renameSync, existsSync } from "node:fs";
 import path from "node:path";
 
 const tx = new Hono();
 
-// Apply auth to all routes (must be first to cover all subsequent handlers)
 tx.use("*", authMiddleware);
 
-// ─── Receipt image serving — MUST come before /:id ──────────────────────────
 tx.get("/:id/receipt", async (c) => {
+  const userId = c.get("userId") as number;
   const paramId = c.req.param("id");
   const id = Number(paramId);
   if (isNaN(id) || String(id) !== String(paramId)) {
     throw new HTTPException(400, { message: "Invalid transaction ID" });
   }
 
+  const transaction = getOne("SELECT id FROM transactions WHERE id = ? AND user_id = ?", [id, userId]) as any;
+  if (!transaction) {
+    throw new HTTPException(404, { message: "Transaction not found" });
+  }
+
   const exts = ["jpg", "jpeg", "png", "webp", "pdf"];
+
+  const checkDirs = [
+    path.resolve(`data/receipts/${userId}`),
+    path.resolve("data/receipts"),
+  ];
+
   let receiptPath: string | null = null;
   let foundExt: string | null = null;
 
-  for (const e of exts) {
-    const p = path.resolve(`data/receipts/${id}.${e}`);
-    if (await Bun.file(p).exists()) {
-      receiptPath = p;
-      foundExt = e;
-      break;
+  for (const dir of checkDirs) {
+    for (const e of exts) {
+      const p = path.join(dir, `${id}.${e}`);
+      if (existsSync(p)) {
+        receiptPath = p;
+        foundExt = e;
+        break;
+      }
     }
+    if (receiptPath) break;
   }
 
   if (!receiptPath) {
@@ -57,9 +71,8 @@ tx.get("/:id/receipt", async (c) => {
   return c.body(Bun.file(receiptPath));
 });
 
-// ─── Existing transaction routes ────────────────────────────────────────────
-
 tx.get("/", async (c) => {
+  const userId = c.get("userId") as number;
   const { page, limit, dateFrom, dateTo, categoryId, type, sortBy, sortOrder } = c.req.query();
   const pageNum = Number(page) || 1;
   const limitNum = Number(limit) || 25;
@@ -68,9 +81,9 @@ tx.get("/", async (c) => {
     SELECT t.*, c.name as category_name, c.color as category_color, c.icon as category_icon
     FROM transactions t
     LEFT JOIN categories c ON t.category_id = c.id
-    WHERE 1=1
+    WHERE t.user_id = ?
   `;
-  const params: any[] = [];
+  const params: any[] = [userId];
 
   if (dateFrom) { sql += " AND t.date >= ?"; params.push(dateFrom); }
   if (dateTo) { sql += " AND t.date <= ?"; params.push(dateTo); }
@@ -93,23 +106,32 @@ tx.get("/", async (c) => {
 });
 
 tx.get("/:id", async (c) => {
+  const userId = c.get("userId") as number;
   const id = Number(c.req.param("id"));
-  const item = getOne("SELECT t.*, c.name as category_name, c.color as category_color, c.icon as category_icon FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.id = ?", [id]);
+  const item = getOne("SELECT t.*, c.name as category_name, c.color as category_color, c.icon as category_icon FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.id = ? AND t.user_id = ?", [id, userId]);
   if (!item) throw new HTTPException(404, { message: "Transaction not found" });
   return c.json(transformTransaction(item));
 });
 
 tx.post("/", async (c) => {
+  const userId = c.get("userId") as number;
   const rawData = await c.req.json();
   const { receiptTempId, receiptTempExt, ...rest } = rawData as any;
   const parsed = insertTransactionSchema.safeParse(rest);
   if (!parsed.success) {
-    throw new HTTPException(400, { message: parsed.error.errors.map((e) => e.message).join(", ") });
+    throw new HTTPException(400, { message: formatZodError(parsed.error) });
+  }
+
+  if (parsed.data.categoryId) {
+    const cat = getOne("SELECT id FROM categories WHERE id = ? AND (user_id IS NULL OR user_id = ?)", [parsed.data.categoryId, userId]) as any;
+    if (!cat) {
+      throw new HTTPException(400, { message: "Invalid category" });
+    }
   }
 
   const data = parsed.data;
   run(
-    "INSERT INTO transactions (amount, currency, amount_default, exchange_rate, description, date, type, category_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO transactions (amount, currency, amount_default, exchange_rate, description, date, type, category_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     [
       data.amount,
       data.currency || "USD",
@@ -119,16 +141,16 @@ tx.post("/", async (c) => {
       data.date,
       data.type,
       data.categoryId || null,
+      userId,
     ],
   );
   const result = lastInsertedRow("transactions");
 
-  // Move receipt from temp to permanent if provided
   if (receiptTempId && receiptTempExt) {
     const safeTempId = String(receiptTempId).replace(/[^a-zA-Z0-9-]/g, "");
     const safeExt = String(receiptTempExt).replace(/[^a-z0-9]/gi, "");
     const tempPath = path.resolve(`data/temp_receipts/${safeTempId}.${safeExt}`);
-    const permDir = path.resolve("data/receipts");
+    const permDir = path.resolve(`data/receipts/${userId}`);
     mkdirSync(permDir, { recursive: true });
     const permPath = path.join(permDir, `${result.id}.${safeExt}`);
     try {
@@ -142,16 +164,17 @@ tx.post("/", async (c) => {
 });
 
 tx.put("/:id", async (c) => {
+  const userId = c.get("userId") as number;
   const id = Number(c.req.param("id"));
   const rawData = await c.req.json();
   const parsed = updateTransactionSchema.safeParse(rawData);
   if (!parsed.success) {
-    throw new HTTPException(400, { message: parsed.error.errors.map((e) => e.message).join(", ") });
+    throw new HTTPException(400, { message: formatZodError(parsed.error) });
   }
 
   const data = parsed.data;
-  const existing = getOne("SELECT * FROM transactions WHERE id = ?", [id]);
-  if (!existing) throw new HTTPException(404);
+  const existing = getOne("SELECT * FROM transactions WHERE id = ? AND user_id = ?", [id, userId]);
+  if (!existing) throw new HTTPException(404, { message: "Transaction not found" });
 
   const updates: string[] = [];
   const params: any[] = [];
@@ -166,15 +189,16 @@ tx.put("/:id", async (c) => {
   if (data.categoryId !== undefined) { updates.push("category_id = ?"); params.push(data.categoryId); }
 
   params.push(id);
-  run(`UPDATE transactions SET ${updates.join(", ")} WHERE id = ?`, params);
+  run(`UPDATE transactions SET ${updates.join(", ")} WHERE id = ? AND user_id = ?`, [...params, userId]);
 
   const result = getOne("SELECT t.*, c.name as category_name, c.color as category_color, c.icon as category_icon FROM transactions t LEFT JOIN categories c ON t.category_id = c.id WHERE t.id = ?", [id]);
   return c.json(transformTransaction(result));
 });
 
 tx.delete("/:id", async (c) => {
+  const userId = c.get("userId") as number;
   const id = Number(c.req.param("id"));
-  run("DELETE FROM transactions WHERE id = ?", [id]);
+  run("DELETE FROM transactions WHERE id = ? AND user_id = ?", [id, userId]);
   return c.json({ success: true });
 });
 

@@ -8,8 +8,8 @@ import { app } from "../server";
 
 const testApp = testClient(app);
 
-const TEST_ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
-const TEST_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin";
+const TEST_ADMIN_USERNAME = "admin";
+const TEST_ADMIN_PASSWORD = "admin12345";
 
 let token: string;
 
@@ -17,15 +17,20 @@ beforeAll(async () => {
   try {
     client.exec("DELETE FROM exchange_rates");
     client.exec("DELETE FROM transactions");
-    client.exec("DELETE FROM categories");
+    client.exec("DELETE FROM refresh_tokens");
+    client.exec("DELETE FROM categories WHERE user_id IS NOT NULL");
     client.exec("DELETE FROM settings");
+    client.exec("DELETE FROM system_config");
     client.exec("DELETE FROM users");
     client.exec("DELETE FROM currencies");
   } catch (e) {
-    // Tables might already be empty
   }
 
   await seed();
+
+  await testApp.setup.$post({
+    json: { username: TEST_ADMIN_USERNAME, password: TEST_ADMIN_PASSWORD, confirmPassword: TEST_ADMIN_PASSWORD },
+  });
 
   const res = await testApp.auth.login.$post({
     json: { username: TEST_ADMIN_USERNAME, password: TEST_ADMIN_PASSWORD },
@@ -287,11 +292,15 @@ describe("OCR URL", () => {
 describe("Receipt Serving", () => {
   it("returns a stored PDF receipt with Content-Disposition: attachment", async () => {
     const fs = await import("node:fs");
-    const receiptsDir = "data/receipts";
+    const adminUser = client.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get() as any;
+    const userId = adminUser?.id || 1;
+    const receiptsDir = `data/receipts/${userId}`;
     fs.mkdirSync(receiptsDir, { recursive: true });
 
+    client.exec(`INSERT INTO transactions (id, amount, currency, amount_default, exchange_rate, description, date, type, user_id) VALUES (99999, 100, 'USD', 100, 1.0, 'test', '2025-01-29', 'expense', ${userId})`);
+
     const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, 0x0a]);
-    fs.writeFileSync("data/receipts/99999.pdf", pdfBytes);
+    fs.writeFileSync(`${receiptsDir}/99999.pdf`, pdfBytes);
 
     const res = await app.fetch(
       new Request("http://localhost/transactions/99999/receipt", {
@@ -304,19 +313,24 @@ describe("Receipt Serving", () => {
     expect(res.headers.get("content-disposition")).toContain("attachment");
     expect(res.headers.get("content-disposition")).toContain("receipt-99999.pdf");
 
-    fs.unlinkSync("data/receipts/99999.pdf");
+    fs.unlinkSync(`${receiptsDir}/99999.pdf`);
+    client.exec("DELETE FROM transactions WHERE id = 99999");
   });
 
   it("serves an image receipt inline without Content-Disposition", async () => {
     const fs = await import("node:fs");
-    const receiptsDir = "data/receipts";
+    const adminUser = client.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get() as any;
+    const userId = adminUser?.id || 1;
+    const receiptsDir = `data/receipts/${userId}`;
     fs.mkdirSync(receiptsDir, { recursive: true });
+
+    client.exec(`INSERT INTO transactions (id, amount, currency, amount_default, exchange_rate, description, date, type, user_id) VALUES (99998, 50, 'USD', 50, 1.0, 'test', '2025-01-29', 'expense', ${userId})`);
 
     const jpegBytes = new Uint8Array([
       0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
       0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xff, 0xd9,
     ]);
-    fs.writeFileSync("data/receipts/99998.jpg", jpegBytes);
+    fs.writeFileSync(`${receiptsDir}/99998.jpg`, jpegBytes);
 
     const res = await app.fetch(
       new Request("http://localhost/transactions/99998/receipt", {
@@ -328,6 +342,7 @@ describe("Receipt Serving", () => {
     expect(res.headers.get("content-type")).toBe("image/jpeg");
     expect(res.headers.get("content-disposition")).toBeNull();
 
-    fs.unlinkSync("data/receipts/99998.jpg");
+    fs.unlinkSync(`${receiptsDir}/99998.jpg`);
+    client.exec("DELETE FROM transactions WHERE id = 99998");
   });
 });

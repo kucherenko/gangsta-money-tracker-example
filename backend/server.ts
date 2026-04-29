@@ -2,9 +2,11 @@ import { Hono } from "hono";
 import { corsMiddleware } from "./middleware/cors";
 import { loggerMiddleware } from "./middleware/logger";
 import { errorHandler } from "./middleware/errorHandler";
-import { initDb } from "./db";
+import { initDb, migrateReceiptFiles, getOne } from "./db";
+import { JWT_SECRET } from "./config";
 import { seed } from "./db/seed";
 import authRoutes from "./routes/auth";
+import adminRoutes from "./routes/admin";
 import transactionRoutes from "./routes/transactions";
 import categoryRoutes from "./routes/categories";
 import dashboardRoutes from "./routes/dashboard";
@@ -13,15 +15,15 @@ import currenciesRoutes from "./routes/currencies";
 import settingsRoutes from "./routes/settings";
 import ratesRoutes from "./routes/rates";
 import ocrRoutes from "./routes/ocr";
+import setupRoutes from "./routes/setup";
 import { startRateFetcher } from "./services/rateFetcher";
 import { startTempCleanupScheduler } from "./services/tempCleanup";
 
-// ─── Environment validation (fail-fast in production) ───
 function validateEnv() {
   const isProduction = process.env.NODE_ENV === "production";
   const required: string[] = [];
   if (isProduction) {
-    required.push("JWT_SECRET", "ADMIN_PASSWORD", "OLLAMA_HOST", "OLLAMA_MODEL");
+    required.push("JWT_SECRET", "OLLAMA_HOST", "OLLAMA_MODEL");
   }
   for (const key of required) {
     if (!process.env[key]) {
@@ -29,21 +31,24 @@ function validateEnv() {
       process.exit(1);
     }
   }
+
+  if (JWT_SECRET.length < 32 && isProduction) {
+    console.warn("WARNING: JWT_SECRET should be at least 32 characters in production");
+  }
 }
 
 validateEnv();
 
-// Initialize database tables
 initDb();
 
 const app = new Hono();
 
-// Middleware
 app.use("*", loggerMiddleware);
 app.use("*", corsMiddleware);
 
-// Routes
 app.route("/auth", authRoutes);
+app.route("/setup", setupRoutes);
+app.route("/admin", adminRoutes);
 app.route("/transactions", transactionRoutes);
 app.route("/api/ocr", ocrRoutes);
 app.route("/categories", categoryRoutes);
@@ -52,10 +57,14 @@ app.route("/currencies", currenciesRoutes);
 app.route("/settings", settingsRoutes);
 app.route("/rates", ratesRoutes);
 
-// Health check
 app.get("/health", (c) => c.json({ status: "ok" }));
 
-// Serve built frontend SPA — try exact file, otherwise fallback to index.html
+app.get("/auth/config/register", (c) => {
+  const regConfig = getOne("SELECT value FROM system_config WHERE key = 'allow_registration'") as any;
+  const adminCount = getOne("SELECT COUNT(*) as count FROM users WHERE role = 'admin'") as { count: number };
+  return c.json({ allowRegistration: regConfig?.value === "true" && adminCount.count > 0, needsSetup: adminCount.count === 0 });
+});
+
 const staticDir = process.env.STATIC_DIR || "../frontend/dist";
 app.get("/*", async (c) => {
   const filePath = `${staticDir}${c.req.path}`;
@@ -66,27 +75,24 @@ app.get("/*", async (c) => {
   return new Response(Bun.file(`${staticDir}/index.html`));
 });
 
-// Global error handler
 app.onError(errorHandler);
 
-// Seed on startup
 seed().catch(console.error);
 
-// Start rate fetcher (non-blocking)
-const stopRateFetcher = startRateFetcher();
+try {
+  migrateReceiptFiles();
+} catch (e) {
+  console.error("Receipt migration error:", e);
+}
 
-// Start temp receipt cleanup scheduler
+const stopRateFetcher = startRateFetcher();
 const stopTempCleanup = startTempCleanupScheduler();
 
 const port = process.env.PORT ? Number(process.env.PORT) : 3001;
 
-// Named export for tests (Hono testClient needs the app object directly)
 export { app };
 export type App = typeof app;
 
-// Default export is the server config — Bun auto-serves this when the file is
-// run directly (bun run server.ts). Exporting as default avoids a second explicit
-// Bun.serve call that would cause EADDRINUSE on every startup.
 export default {
   port,
   fetch: app.fetch,

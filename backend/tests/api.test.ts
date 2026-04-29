@@ -8,36 +8,39 @@ import { app } from "../server";
 
 const testApp = testClient(app);
 
-const TEST_ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
-const TEST_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin";
+const TEST_ADMIN_USERNAME = "admin";
+const TEST_ADMIN_PASSWORD = "admin12345";
 
-// Shared token
 let token: string;
+let refreshToken: string;
 
 beforeAll(async () => {
-  // Remove DB file to start completely fresh
   try {
-    // Delete all data and reset
     client.exec("DELETE FROM exchange_rates");
     client.exec("DELETE FROM transactions");
-    client.exec("DELETE FROM categories");
+    client.exec("DELETE FROM refresh_tokens");
+    client.exec("DELETE FROM categories WHERE user_id IS NOT NULL");
     client.exec("DELETE FROM settings");
+    client.exec("DELETE FROM system_config");
     client.exec("DELETE FROM users");
     client.exec("DELETE FROM currencies");
   } catch (e) {
     // Tables might already be empty
   }
   
-  // Re-seed (creates admin user, categories, settings row)
   await seed();
   seedCurrencies();
   
-  // Login
+  await testApp.setup.$post({
+    json: { username: TEST_ADMIN_USERNAME, password: TEST_ADMIN_PASSWORD, confirmPassword: TEST_ADMIN_PASSWORD },
+  });
+  
   const res = await testApp.auth.login.$post({
     json: { username: TEST_ADMIN_USERNAME, password: TEST_ADMIN_PASSWORD },
   });
   const body = await res.json();
   token = body.token;
+  refreshToken = body.refreshToken;
 });
 
 describe("Multi-Currency Feature", () => {
@@ -59,6 +62,7 @@ describe("Multi-Currency Feature", () => {
       const body = await res.json();
       expect(body.token).toBeDefined();
       expect(typeof body.token).toBe("string");
+      expect(body.refreshToken).toBeDefined();
     });
 
     it("rejects invalid credentials", async () => {
@@ -183,7 +187,9 @@ describe("Multi-Currency Feature", () => {
   describe("Rate Fetcher", () => {
     beforeAll(async () => {
       // Ensure settings row exists for auto-fetch
-      client.prepare("INSERT OR REPLACE INTO settings (id, default_currency, auto_fetch_rates, fiat_fetch_interval, crypto_fetch_interval) VALUES (1, 'USD', 1, 60, 5)").run();
+      const adminUser = client.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get() as any;
+      const userId = adminUser?.id || 1;
+      client.prepare("INSERT OR REPLACE INTO settings (id, user_id, default_currency, auto_fetch_rates, fiat_fetch_interval, crypto_fetch_interval) VALUES (1, ?, 'USD', 1, 60, 5)").run(userId);
       // Seed UAH and ALL as fiat currencies
       client.prepare("INSERT OR IGNORE INTO currencies (code, name, symbol, precision, type, is_active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)").run("UAH", "Ukrainian Hryvnia", "₴", 2, "fiat", 1, 0);
       client.prepare("INSERT OR IGNORE INTO currencies (code, name, symbol, precision, type, is_active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)").run("ALL", "Albanian Lek", "L", 2, "fiat", 1, 0);

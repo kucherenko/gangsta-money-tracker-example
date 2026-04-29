@@ -6,12 +6,17 @@
   let password = $state("");
   let error = $state("");
   let loading = $state(false);
+  let registrationEnabled = $state(false);
 
   interface Props {
     onLogin?: () => void;
   }
 
   let { onLogin }: Props = $props();
+
+  api.getRegistrationStatus().then((d: any) => {
+    registrationEnabled = d.allowRegistration;
+  }).catch(() => {});
 
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
@@ -61,7 +66,7 @@
           bind:value={password}
           required
           class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-          placeholder="admin"
+          placeholder="password"
         />
       </div>
 
@@ -73,5 +78,11 @@
         {loading ? "Signing in..." : "Sign In"}
       </button>
     </form>
+
+    {#if registrationEnabled}
+      <div class="mt-4 text-center">
+        <a href="#/register" class="text-sm text-blue-600 hover:text-blue-800">Don't have an account? Register</a>
+      </div>
+    {/if}
   </div>
 </div>

@@ -3,18 +3,51 @@ import { z } from "zod";
 // ─── User ─────────────────────────────────────────────────────────────────────
 
 export const loginSchema = z.object({
-  username: z.string().min(1).max(50),
-  password: z.string().min(1).max(100),
+  username: z.string().min(1).max(100),
+  password: z.string().min(1).max(256),
+});
+
+export const registerSchema = z.object({
+  username: z.string().min(3).max(30).regex(/^[a-zA-Z0-9_]+$/, "Username must be 3-30 chars, alphanumeric + underscore"),
+  email: z.string().email().optional(),
+  password: z.string().min(8).max(128),
+  confirmPassword: z.string().min(8).max(128),
+}).refine((d) => d.password === d.confirmPassword, { message: "Passwords don't match", path: ["confirmPassword"] });
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: z.string().min(8).max(128),
+  confirmNewPassword: z.string().min(8).max(128),
+}).refine((d) => d.newPassword === d.confirmNewPassword, { message: "Passwords don't match", path: ["confirmNewPassword"] });
+
+export const refreshTokenSchema = z.object({
+  refreshToken: z.string().min(1),
+});
+
+export const createUserSchema = z.object({
+  username: z.string().min(3).max(30).regex(/^[a-zA-Z0-9_]+$/, "Username must be 3-30 chars, alphanumeric + underscore"),
+  email: z.string().email().optional(),
+  password: z.string().min(8).max(128),
+  role: z.enum(["admin", "user"]).default("user"),
+});
+
+export const systemConfigSchema = z.object({
+  key: z.string().min(1).max(100),
+  value: z.string().min(1).max(1000),
 });
 
 export const userSchema = z.object({
   id: z.number().int(),
   username: z.string(),
-  passwordHash: z.string(),
-  token: z.string().nullable().optional(),
+  role: z.string().default("user"),
+  email: z.string().nullable().optional(),
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
+export type RegisterInput = z.infer<typeof registerSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+export type CreateUserInput = z.infer<typeof createUserSchema>;
+export type SystemConfigInput = z.infer<typeof systemConfigSchema>;
 export type User = z.infer<typeof userSchema>;
 
 // ─── Category ─────────────────────────────────────────────────────────────────
@@ -141,6 +174,14 @@ export const updateTransactionSchema = insertTransactionSchema.partial().refine(
 export type Transaction = z.infer<typeof transactionSchema>;
 export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
 export type UpdateTransaction = z.infer<typeof updateTransactionSchema>;
+
+export const setupSchema = z.object({
+  username: z.string().min(3).max(30).regex(/^[a-zA-Z0-9_]+$/, "Username must be 3-30 chars, alphanumeric + underscore"),
+  password: z.string().min(8).max(128),
+  confirmPassword: z.string().min(8).max(128),
+}).refine((d) => d.password === d.confirmPassword, { message: "Passwords don't match", path: ["confirmPassword"] });
+
+export type SetupInput = z.infer<typeof setupSchema>;
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 

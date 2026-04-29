@@ -1,21 +1,32 @@
 <script lang="ts">
   import Login from "./routes/Login.svelte";
+  import Register from "./routes/Register.svelte";
   import Dashboard from "./routes/Dashboard.svelte";
   import Transactions from "./routes/Transactions.svelte";
   import TransactionForm from "./routes/TransactionForm.svelte";
   import Settings from "./routes/Settings.svelte";
+  import Setup from "./routes/Setup.svelte";
   import OfflineNotice from "./components/OfflineNotice.svelte";
   import { auth } from "./state/auth.svelte";
+  import { onMount } from "svelte";
 
   let route = $state(window.location.hash || "#/login");
   window.addEventListener("hashchange", () => {
     route = window.location.hash;
   });
 
-  // Redirect unauthenticated to login
   $effect(() => {
-    if (!auth.isAuthenticated && route !== "#/login") {
+    if (auth.needsSetup && route !== "#/setup") {
+      window.location.hash = "#/setup";
+    } else if (!auth.needsSetup && !auth.isAuthenticated && route !== "#/login" && route !== "#/register" && route !== "#/setup") {
       window.location.hash = "#/login";
+    }
+  });
+
+  onMount(() => {
+    auth.checkSetupStatus();
+    if (auth.isAuthenticated) {
+      auth.fetchUser();
     }
   });
 
@@ -42,6 +53,12 @@
         <a href="#/dashboard" class="text-sm text-gray-600 hover:text-gray-900" onclick={(e: Event) => { e.preventDefault(); navigate("/dashboard"); }}>Dashboard</a>
         <a href="#/transactions" class="text-sm text-gray-600 hover:text-gray-900" onclick={(e: Event) => { e.preventDefault(); navigate("/transactions"); }}>Transactions</a>
         <a href="#/settings" class="text-sm text-gray-600 hover:text-gray-900" onclick={(e: Event) => { e.preventDefault(); navigate("/settings"); }}>Settings</a>
+        <span class="text-xs text-gray-500 border-l border-gray-200 pl-4">
+          {auth.user?.username || "User"}
+          {#if auth.user?.role === 'admin'}
+            <span class="text-blue-600 font-medium">(admin)</span>
+          {/if}
+        </span>
         <button onclick={handleLogout} class="text-sm text-red-600 hover:text-red-800">Logout</button>
       </div>
     </div>
@@ -49,8 +66,14 @@
 {/if}
 
 <main class="max-w-4xl mx-auto px-4 py-6">
-  {#if route === "#/login" || !auth.isAuthenticated}
+  {#if auth.needsSetup && route !== "#/setup"}
+    <Setup onSetupComplete={() => navigate("/dashboard")} />
+  {:else if route === "#/setup"}
+    <Setup onSetupComplete={() => navigate("/dashboard")} />
+  {:else if route === "#/login" || !auth.isAuthenticated}
     <Login onLogin={() => navigate("/dashboard")} />
+  {:else if route === "#/register"}
+    <Register onRegister={() => navigate("/dashboard")} />
   {:else if route === "#/dashboard"}
     <Dashboard />
   {:else if route === "#/transactions"}

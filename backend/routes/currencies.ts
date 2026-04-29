@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { authMiddleware } from "../middleware/auth";
 import { query, getOne, run } from "../db";
 import { insertCurrencySchema } from "@money-tracker/shared/schemas";
+import { formatZodError } from "../lib/utils";
 import {
   isIsoFiatCode,
   ALL_SUPPORTED_CODES,
@@ -63,7 +64,7 @@ currencies.post("/import", async (c) => {
   for (const item of data) {
     const parsed = insertCurrencySchema.safeParse(item);
     if (!parsed.success) {
-      results.failed.push(`${item.code || "?"}: ${parsed.error.errors.map((e) => e.message).join(", ")}`);
+      results.failed.push(`${item.code || "?"}: ${formatZodError(parsed.error)}`);
       continue;
     }
 
@@ -113,7 +114,7 @@ currencies.post("/", async (c) => {
   const rawData = await c.req.json();
   const parsed = insertCurrencySchema.safeParse(rawData);
   if (!parsed.success) {
-    throw new HTTPException(400, { message: parsed.error.errors.map((e) => e.message).join(", ") });
+    throw new HTTPException(400, { message: formatZodError(parsed.error) });
   }
 
   const data = parsed.data;

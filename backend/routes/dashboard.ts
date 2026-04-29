@@ -33,32 +33,24 @@ function getLast6Months() {
 }
 
 dashboard.get("/", async (c) => {
+  const userId = c.get("userId") as number;
   const monthStart = getMonthStart();
   const monthEnd = getMonthEnd();
   const yearStart = getYearStart();
 
-  // All transactions
-  const allTx = query("SELECT * FROM transactions");
+  const allTx = query("SELECT * FROM transactions WHERE user_id = ?", [userId]);
+  const monthTx = query("SELECT * FROM transactions WHERE user_id = ? AND date >= ? AND date <= ?", [userId, monthStart, monthEnd]);
+  const yearTx = query("SELECT * FROM transactions WHERE user_id = ? AND date >= ?", [userId, yearStart]);
 
-  // Monthly transactions
-  const monthTx = query("SELECT * FROM transactions WHERE date >= ? AND date <= ?", [monthStart, monthEnd]);
-
-  // Year transactions
-  const yearTx = query("SELECT * FROM transactions WHERE date >= ?", [yearStart]);
-
-  // Current balance
   const totalIncome = allTx.filter((t: any) => t.type === "income").reduce((sum: number, t: any) => sum + (t.amount_default ?? t.amount), 0);
   const totalExpense = allTx.filter((t: any) => t.type === "expense").reduce((sum: number, t: any) => sum + (t.amount_default ?? t.amount), 0);
 
-  // Monthly totals
   const monthIncome = monthTx.filter((t: any) => t.type === "income").reduce((sum: number, t: any) => sum + (t.amount_default ?? t.amount), 0);
   const monthExpense = monthTx.filter((t: any) => t.type === "expense").reduce((sum: number, t: any) => sum + (t.amount_default ?? t.amount), 0);
 
-  // Year totals
   const yearIncome = yearTx.filter((t: any) => t.type === "income").reduce((sum: number, t: any) => sum + (t.amount_default ?? t.amount), 0);
   const yearExpense = yearTx.filter((t: any) => t.type === "expense").reduce((sum: number, t: any) => sum + (t.amount_default ?? t.amount), 0);
 
-  // Monthly trend (last 6 months)
   const months = getLast6Months();
   const monthlyTrend = months.map((m: string) => {
     const monthTx2 = allTx.filter((t: any) => t.date.startsWith(m));
@@ -69,8 +61,7 @@ dashboard.get("/", async (c) => {
     };
   });
 
-  // Category breakdown
-  const categoriesList = query("SELECT id, name, color FROM categories");
+  const categoriesList = query("SELECT id, name, color FROM categories WHERE user_id IS NULL OR user_id = ?", [userId]);
   const categoryBreakdown = categoriesList.map((cat: any) => {
     const catTotal = monthTx
       .filter((t: any) => t.category_id === cat.id)

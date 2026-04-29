@@ -2,40 +2,77 @@ import type { ReceiptUploadResponse } from "@money-tracker/shared/schemas";
 
 const API_URL = "http://localhost:3001";
 
-function getToken(): string {
-  return localStorage.getItem("token") || "";
+let accessToken: string | null = localStorage.getItem("accessToken");
+let refreshToken: string | null = localStorage.getItem("refreshToken");
+let refreshPromise: Promise<string> | null = null;
+
+function setTokens(access: string, refresh: string) {
+  accessToken = access;
+  refreshToken = refresh;
+  localStorage.setItem("accessToken", access);
+  localStorage.setItem("refreshToken", refresh);
 }
 
-function getHeaders(): HeadersInit {
-  const token = getToken();
-  return {
+function clearTokens() {
+  accessToken = null;
+  refreshToken = null;
+  localStorage.removeItem("accessToken");
+  localStorage.removeItem("refreshToken");
+}
+
+async function refreshAccessToken(): Promise<string> {
+  if (!refreshToken) throw new Error("No refresh token");
+  const res = await fetch(`${API_URL}/auth/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refreshToken }),
+  });
+  if (!res.ok) {
+    clearTokens();
+    window.location.hash = "#/login";
+    throw new Error("Session expired");
+  }
+  const data = await res.json();
+  setTokens(data.token, data.refreshToken);
+  return data.token;
+}
+
+async function fetchWithAuth(path: string, options?: RequestInit): Promise<Response> {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(options?.headers as Record<string, string> || {}),
   };
+  if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
+
+  let res = await fetch(`${API_URL}${path}`, { ...options, headers });
+
+  if (res.status === 401 && refreshToken) {
+    if (!refreshPromise) {
+      refreshPromise = refreshAccessToken().finally(() => { refreshPromise = null; });
+    }
+    const newToken = await refreshPromise;
+    headers["Authorization"] = `Bearer ${newToken}`;
+    res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  }
+
+  return res;
 }
 
 async function fetchJson(path: string, options?: RequestInit) {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: getHeaders(),
-  });
-
+  const res = await fetchWithAuth(path, options);
   if (res.status === 401) {
-    localStorage.removeItem("token");
+    clearTokens();
     window.location.hash = "#/login";
     throw new Error("Session expired. Please log in again.");
   }
-
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Unknown error" }));
-    throw new Error(err.error || `HTTP ${res.status}`);
+    throw new Error(err.error || err.message || `HTTP ${res.status}`);
   }
-
   return res.json();
 }
 
 export const api = {
-  // Auth
   login: async (credentials: { username: string; password: string }) => {
     const res = await fetch(`${API_URL}/auth/login`, {
       method: "POST",
@@ -44,14 +81,55 @@ export const api = {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: "Login failed" }));
-      throw new Error(err.error || "Login failed");
+      throw new Error(err.error || err.message || "Login failed");
     }
     const data = await res.json();
-    localStorage.setItem("token", data.token);
+    setTokens(data.token, data.refreshToken);
     return data;
   },
 
-  // Transactions
+  register: async (data: { username: string; password: string; confirmPassword: string; email?: string }) => {
+    const res = await fetch(`${API_URL}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: "Registration failed" }));
+      throw new Error(err.error || err.message || "Registration failed");
+    }
+    const result = await res.json();
+    setTokens(result.token, result.refreshToken);
+    return result;
+  },
+
+  logout: async (rt?: string) => {
+    const token = rt || localStorage.getItem("refreshToken");
+    if (token) {
+      try {
+        await fetch(`${API_URL}/auth/logout`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+          body: JSON.stringify({ refreshToken: token }),
+        });
+      } catch {}
+    }
+    clearTokens();
+  },
+
+  changePassword: async (data: { currentPassword: string; newPassword: string; confirmNewPassword: string }) => {
+    return fetchJson("/auth/change-password", { method: "POST", body: JSON.stringify(data) });
+  },
+
+  getMe: async () => {
+    return fetchJson("/auth/me");
+  },
+
+  getRegistrationStatus: async () => {
+    const res = await fetch(`${API_URL}/auth/config/register`);
+    return res.json();
+  },
+
   getTransactions: (params?: { page?: number; limit?: number; dateFrom?: string; dateTo?: string; categoryId?: number; type?: string; sortBy?: string; sortOrder?: string; currency?: string }) => {
     const search = new URLSearchParams();
     if (params?.page) search.set("page", String(params.page));
@@ -67,15 +145,13 @@ export const api = {
   },
   getTransaction: (id: number) => fetchJson(`/transactions/${id}`),
 
-  // OCR Receipt upload — multipart, NOT JSON
   uploadReceipt: async (file: File): Promise<ReceiptUploadResponse> => {
+    const currentAccessToken = localStorage.getItem("accessToken") || "";
     const formData = new FormData();
     formData.append("image", file);
     const res = await fetch(`${API_URL}/api/ocr`, {
       method: "POST",
-      headers: {
-        ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
-      },
+      headers: { ...(currentAccessToken ? { Authorization: `Bearer ${currentAccessToken}` } : {}) },
       body: formData,
     });
     if (!res.ok) {
@@ -85,28 +161,21 @@ export const api = {
     return res.json();
   },
 
-  // OCR Receipt from URL — JSON
   uploadReceiptFromUrl: async (url: string): Promise<ReceiptUploadResponse> => {
-    return fetchJson("/api/ocr/url", {
-      method: "POST",
-      body: JSON.stringify({ url }),
-    });
+    return fetchJson("/api/ocr/url", { method: "POST", body: JSON.stringify({ url }) });
   },
 
   createTransaction: (data: any) => fetchJson("/transactions", { method: "POST", body: JSON.stringify(data) }),
   updateTransaction: (id: number, data: any) => fetchJson(`/transactions/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteTransaction: (id: number) => fetchJson(`/transactions/${id}`, { method: "DELETE" }),
 
-  // Categories
   getCategories: () => fetchJson("/categories"),
   createCategory: (data: any) => fetchJson("/categories", { method: "POST", body: JSON.stringify(data) }),
   updateCategory: (id: number, data: any) => fetchJson(`/categories/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteCategory: (id: number) => fetchJson(`/categories/${id}`, { method: "DELETE" }),
 
-  // Dashboard
   getDashboard: () => fetchJson("/dashboard"),
 
-  // Currencies
   getCurrencies: (type?: string, all?: boolean) => {
     const search = new URLSearchParams();
     if (type) search.set("type", type);
@@ -121,11 +190,9 @@ export const api = {
   exportCurrencies: () => fetchJson("/currencies/export"),
   importCurrencies: (data: any[]) => fetchJson("/currencies/import", { method: "POST", body: JSON.stringify(data) }),
 
-  // Settings
   getSettings: () => fetchJson("/settings"),
   updateSettings: (data: any) => fetchJson("/settings", { method: "PUT", body: JSON.stringify(data) }),
 
-  // Rates
   getRates: (base?: string) => {
     const search = base ? `?base=${base}` : "";
     return fetchJson(`/rates${search}`);
@@ -133,14 +200,17 @@ export const api = {
   getRate: (base: string, target: string) => fetchJson(`/rates/${base}/${target}`),
   refreshRates: () => fetchJson("/rates/refresh", { method: "POST" }),
 
-  // Token helpers
-  setToken(newToken: string) {
-    localStorage.setItem("token", newToken);
+  // Admin
+  getUsers: () => fetchJson("/admin/users"),
+  createUser: (data: { username: string; password: string; email?: string; role?: string }) => fetchJson("/admin/users", { method: "POST", body: JSON.stringify(data) }),
+  deleteUser: (id: number) => fetchJson(`/admin/users/${id}`, { method: "DELETE" }),
+  getConfig: () => fetchJson("/admin/config"),
+  updateConfig: (key: string, value: string) => fetchJson(`/admin/config/${key}`, { method: "PUT", body: JSON.stringify({ value }) }),
+
+  setTokens(ac: string, rc: string) {
+    setTokens(ac, rc);
   },
-  getToken() {
-    return getToken();
-  },
-  clearToken() {
-    localStorage.removeItem("token");
+  clearTokens() {
+    clearTokens();
   },
 };
